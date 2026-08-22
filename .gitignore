@@ -1,0 +1,37 @@
+# --- Terraform ---
+# state에는 리소스 속성이 평문으로 저장된다. 절대 커밋하지 않는다.
+*.tfstate
+*.tfstate.*
+*.tfplan
+# 프로바이더 바이너리 캐시 (수백 MB)
+**/.terraform/*
+# 변수 파일에 계정 정보가 들어갈 수 있다
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+# .terraform.lock.hcl은 의도적으로 커밋한다 (프로바이더 버전 고정)
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Kubernetes ---
+kubeconfig
+kubeconfig-*
+
+# --- OS / 에디터 ---
+.DS_Store
+.idea/
+.vscode/
