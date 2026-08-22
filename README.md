@@ -17,4 +17,6 @@ ad-event-generator (노출/클릭 시뮬레이터)
   → Prometheus + Grafana (처리량/랙/스케일링 관측)
 ```
 
-상세 설계 문서: [docs/specs/2026-08-22-adspectrum-design.md](docs/specs/2026-08-22-adspectrum-design.md)
+## 문서
+
+- [설계 스펙](docs/SPEC.md) — 아키텍처, 컴포넌트 스펙, 일정, 컷라인, 설계 의사결정
