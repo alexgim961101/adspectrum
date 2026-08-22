@@ -1,7 +1,7 @@
 # adspectrum 설계 스펙
 
 - 작성일: 2026-08-22
-- 상태: 승인됨 (구현 전)
+- 상태: 승인됨. 구현 중 변경된 사항은 `docs/DECISIONS.md`에 근거와 함께 기록한다.
 - 이 문서는 다른 세션/작업자가 컨텍스트 없이 읽고 구현을 시작할 수 있도록 작성한 자기완결적 스펙이다.
 
 ## 1. 배경과 목적
@@ -161,7 +161,7 @@ adspectrum/
 | 모듈 | 내용 |
 |---|---|
 | `network` | VPC, 퍼블릭/프라이빗 서브넷 2AZ, **단일 NAT GW**(비용 절감, 결정 기록) |
-| `eks` | EKS(작성 시점 최신 안정 버전), 관리형 노드그룹 **spot t3.medium, desired 2 / max 4**, 애드온(vpc-cni, coredns, kube-proxy), OIDC 프로바이더 |
+| `eks` | EKS(작성 시점 최신 안정 버전), 관리형 노드그룹 **spot t3.medium, desired 2 / max 4**, 애드온(vpc-cni, coredns, kube-proxy), OIDC 프로바이더. vpc-cni는 **prefix delegation 활성화** (DECISIONS 001) |
 | `data` | SQS 메인 큐 + DLQ(`maxReceiveCount=3`), DynamoDB 온디맨드 테이블, ECR 리포 3개(스캔 활성화) |
 | `iam` | IRSA 역할 4종 + GitHub Actions OIDC 역할 |
 
@@ -215,7 +215,7 @@ PR 워크플로는 lint+test만 수행한다.
 
 ### KEDA
 
-- `ScaledObject`(event-consumer): SQS 큐 길이 트리거, `queueLength: 100`, `minReplicaCount: 0`, `maxReplicaCount: 10`, `cooldownPeriod: 120`
+- `ScaledObject`(event-consumer): SQS 큐 길이 트리거, `queueLength: 100`, `minReplicaCount: 0`, `maxReplicaCount: 5`, `cooldownPeriod: 120` (상한 근거는 DECISIONS 001)
 - 인증은 keda-operator IRSA 사용 (`identityOwner: operator`)
 
 ### 대시보드 (Grafana, 최소 5패널)
