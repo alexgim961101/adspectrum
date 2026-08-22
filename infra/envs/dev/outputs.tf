@@ -37,3 +37,28 @@ output "ecr_repository_urls" {
   description = "앱 이름 → ECR 리포지토리 URL"
   value       = module.data.ecr_repository_urls
 }
+
+output "cluster_name" {
+  description = "EKS 클러스터 이름"
+  value       = module.eks.cluster_name
+}
+
+output "cluster_endpoint" {
+  description = "쿠버네티스 API 서버 엔드포인트"
+  value       = module.eks.cluster_endpoint
+}
+
+output "configure_kubectl" {
+  description = "kubeconfig를 갱신하는 명령"
+  value       = "aws eks update-kubeconfig --region ${local.region} --name ${module.eks.cluster_name}"
+}
+
+output "irsa_role_arns" {
+  description = "ServiceAccount 어노테이션에 넣을 IRSA 역할 ARN"
+  value       = module.iam.irsa_role_arns
+}
+
+output "github_actions_role_arn" {
+  description = "CI 워크플로의 role-to-assume 값"
+  value       = module.iam.github_actions_role_arn
+}
