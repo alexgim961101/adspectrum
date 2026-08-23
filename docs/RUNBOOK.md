@@ -162,8 +162,28 @@ terraform destroy
 
 ### 삭제 후 남는 것
 
-EKS 시크릿 암호화용 KMS 키는 즉시 삭제되지 않고 7일 대기 후 사라진다. 재생성할 때마다
-대기 상태의 키가 늘어나는 것은 정상이며 과금되지 않는다.
+의도적으로 남기는 것과 시간이 지나야 사라지는 것을 구분해야 한다.
+아래는 2026-08-23 첫 destroy에서 확인한 결과다.
+
+| 대상 | 상태 | 이유 |
+|---|---|---|
+| KMS 키 | `PendingDeletion` (7일 뒤 삭제) | 삭제 대기 기간. 과금되지 않는다 |
+| GitHub Actions OIDC 공급자 | 그대로 남음 | 계정 공용 리소스라 소유하지 않는다 (DECISIONS 003) |
+| NAT Gateway | `deleted` 상태로 목록에 잠시 표시 | AWS가 삭제 기록을 일정 기간 보여준다. 과금 없음 |
+| VPC · EKS · SQS · DynamoDB · ECR · IAM 역할 · 예산 | 전부 삭제됨 | — |
+
+삭제 확인 명령:
+
+```sh
+terraform state list          # 0줄이어야 한다
+aws eks list-clusters --region ap-northeast-2
+aws ec2 describe-vpcs --region ap-northeast-2 \
+  --filters "Name=tag:Project,Values=adspectrum" --query 'Vpcs[].VpcId'
+aws sqs list-queues --queue-name-prefix adspectrum --region ap-northeast-2
+```
+
+`terraform.tfstate`는 빈 상태로 남고 직전 상태는 `terraform.tfstate.backup`에 보관된다.
+둘 다 커밋 대상이 아니다.
 
 ---
 
