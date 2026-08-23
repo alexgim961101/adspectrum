@@ -37,3 +37,11 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+    # 일시적 실패(웹훅 미기동, CRD 준비 전 등)에서 스스로 회복하도록 재시도한다.
+    # 없으면 한 번 실패한 뒤 OutOfSync 상태로 멈춰 사람이 개입해야 한다.
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
