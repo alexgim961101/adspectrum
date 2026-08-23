@@ -229,3 +229,73 @@ ServiceAccount 이름까지 좁혀 두었다.
 계정 ID가 알려지면 역할 이름 추측을 통한 열거 시도의 출발점이 될 수 있다. 다만 신뢰 정책이
 이 클러스터의 특정 ServiceAccount로 제한되어 있어 외부에서 역할을 맡을 수 없다.
 민감도가 높은 조직이라면 저장소를 비공개로 두거나 배포 계정을 분리하는 것이 맞다.
+
+---
+
+## 006. ALB Controller가 IMDS에 접근하지 못해 기동 실패
+
+- 날짜: 2026-08-23
+- 상태: 해결
+
+### 증상
+
+2일차 부트스트랩 후 `aws-load-balancer-controller` 파드가 `CrashLoopBackOff`에 빠졌다.
+IRSA 어노테이션은 정상이었고 역할도 붙어 있었는데 로그는 이렇게 나왔다.
+
+```
+unable to initialize AWS cloud
+error: failed to get VPC ID: failed to fetch VPC ID from instance metadata:
+       get mac metadata: operation error ec2imds: GetMetadata, canceled, context deadline exceeded
+```
+
+권한 문제가 아니라 **컨트롤러가 자기가 속한 VPC를 찾지 못하는** 문제였다.
+
+### 원인
+
+컨트롤러는 VPC ID와 리전을 EC2 인스턴스 메타데이터(IMDS)에서 읽는다. 그런데 노드 시작
+템플릿의 `HttpPutResponseHopLimit`이 **1**이었다. 파드는 CNI를 거쳐 한 홉 떨어져 있으므로
+홉 제한이 1이면 IMDS에 도달할 수 없다. 이건 결함이 아니라 보안 기본값이다 — 파드가 IMDS에
+닿으면 **노드의 IAM 역할 자격증명을 훔칠 수 있어** IRSA로 권한을 나눈 의미가 사라진다.
+
+### 연쇄 피해
+
+컨트롤러가 죽어 있는 동안 그것이 등록한 mutating webhook(`mservice.elbv2.k8s.aws`)은 살아 있었다.
+웹훅에 엔드포인트가 없으니 **클러스터 전체에서 Service 생성이 실패**했고, KEDA와
+kube-prometheus-stack의 동기화가 함께 무너졌다. 표면적으로는 세 앱이 각각 고장 난 것처럼 보였지만
+원인은 하나였다.
+
+### 선택지
+
+| 안 | 내용 | 평가 |
+|---|---|---|
+| A | `vpcTags`로 VPC를 태그 조회하게 한다 | IMDS 불필요. VPC ID가 바뀌어도 매니페스트가 그대로다 |
+| B | 노드의 IMDS 홉 제한을 2로 올린다 | 동작하지만 모든 파드가 노드 자격증명에 접근할 수 있게 된다 |
+| C | `vpcId`를 매니페스트에 직접 적는다 | destroy/apply마다 VPC ID가 바뀌어 매일 고쳐야 한다 |
+
+### 결정
+
+**A.** `region`을 명시하고 VPC는 `vpcTags`(`Project=adspectrum`, `Environment=dev`)로 찾게 했다.
+
+### 근거
+
+B는 이 프로젝트가 IRSA로 파드별 권한을 나눈 것과 정면으로 충돌한다. 홉 제한 1은 그 설계를
+강제하는 장치이므로, 컨트롤러 하나를 위해 클러스터 전체의 방어선을 낮출 이유가 없다.
+
+C는 매일 인프라를 내렸다 올리는 이 프로젝트의 운영 방식과 맞지 않는다. Git에 적힌 값이 하루 만에
+낡는다면 "Git이 유일한 진실"이라는 전제가 성립하지 않는다.
+
+A는 태그가 provider `default_tags`로 항상 붙기 때문에 VPC를 몇 번을 다시 만들어도 유효하다.
+필요한 `ec2:DescribeVpcs` 권한은 벤더 정책에 이미 포함되어 있었다.
+
+### 함께 고친 것
+
+동기화가 한 번 실패한 뒤 `OutOfSync`에서 멈춰 사람이 개입해야 했다. 자식 Application에
+재시도 정책(`limit 5`, 15초부터 지수 백오프)을 추가해 일시적 실패에서 스스로 회복하게 했다.
+웹훅이나 CRD 준비 순서 때문에 첫 시도가 실패하는 것은 흔한 일이라, 재시도가 없으면
+클러스터를 다시 만들 때마다 같은 개입이 필요하다.
+
+### 배운 것
+
+어드미션 웹훅을 등록하는 컨트롤러가 죽으면 그 여파가 컨트롤러 자신에 그치지 않는다.
+증상이 여러 곳에서 동시에 나타날 때 각각을 따로 고치려 들면 시간을 잃는다.
+이번에는 세 앱이 고장 난 것처럼 보였지만 실제 원인은 하나였고, 그것을 고치자 나머지는 저절로 풀렸다.
