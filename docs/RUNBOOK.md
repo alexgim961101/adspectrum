@@ -229,23 +229,41 @@ terraform destroy
 ### 삭제 후 남는 것
 
 의도적으로 남기는 것과 시간이 지나야 사라지는 것을 구분해야 한다.
-아래는 2026-08-23 첫 destroy에서 확인한 결과다.
+아래는 2026-08-23 ArgoCD까지 올린 상태에서 destroy한 뒤 확인한 결과다(74개 삭제, 약 11분).
 
 | 대상 | 상태 | 이유 |
 |---|---|---|
-| KMS 키 | `PendingDeletion` (7일 뒤 삭제) | 삭제 대기 기간. 과금되지 않는다 |
-| GitHub Actions OIDC 공급자 | 그대로 남음 | 계정 공용 리소스라 소유하지 않는다 (DECISIONS 003) |
-| NAT Gateway | `deleted` 상태로 목록에 잠시 표시 | AWS가 삭제 기록을 일정 기간 보여준다. 과금 없음 |
+| KMS 키 | `PendingDeletion` (7일 뒤) | 삭제 대기 기간. 재생성할 때마다 하나씩 늘지만 과금되지 않는다 |
+| GitHub Actions OIDC 공급자 | 남음 | 계정 공용 리소스라 소유하지 않는다 (DECISIONS 003) |
+| GitHub 배포 키 | 남음 | AWS가 아니라 GitHub에 있다. **지우면 다음 부트스트랩이 실패한다** |
+| `~/.ssh/adspectrum-argocd-deploy` | 남음 | 위와 같은 이유로 유지한다 |
+| NAT Gateway | `deleted` 상태로 잠시 표시 | AWS가 삭제 기록을 일정 기간 보여준다. 과금 없음 |
 | VPC · EKS · SQS · DynamoDB · ECR · IAM 역할 · 예산 | 전부 삭제됨 | — |
 
-삭제 확인 명령:
+### 삭제 확인
 
 ```sh
 terraform state list          # 0줄이어야 한다
+
 aws eks list-clusters --region ap-northeast-2
 aws ec2 describe-vpcs --region ap-northeast-2 \
   --filters "Name=tag:Project,Values=adspectrum" --query 'Vpcs[].VpcId'
 aws sqs list-queues --queue-name-prefix adspectrum --region ap-northeast-2
+aws iam list-roles --query 'Roles[?starts_with(RoleName,`adspectrum`)].RoleName'
+```
+
+### 고아 리소스 검사
+
+클러스터가 만든 리소스는 Terraform이 모른다. 아래가 전부 비어 있어야 한다.
+
+```sh
+aws elbv2 describe-load-balancers --region ap-northeast-2 \
+  --query 'LoadBalancers[].LoadBalancerName'
+aws ec2 describe-network-interfaces --region ap-northeast-2 \
+  --filters "Name=status,Values=available" --query 'NetworkInterfaces[].NetworkInterfaceId'
+aws ec2 describe-instances --region ap-northeast-2 \
+  --filters "Name=instance-state-name,Values=running,pending" \
+  --query 'Reservations[].Instances[].InstanceId'
 ```
 
 `terraform.tfstate`는 빈 상태로 남고 직전 상태는 `terraform.tfstate.backup`에 보관된다.
