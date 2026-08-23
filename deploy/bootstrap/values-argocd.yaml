@@ -13,11 +13,19 @@ global:
 dex:
   enabled: false
 
-# 알림과 ApplicationSet은 이 프로젝트 범위 밖이다.
+# 알림은 이 프로젝트 범위 밖이다.
 notifications:
   enabled: false
+
+# ApplicationSet 컨트롤러는 이 차트 버전에서 핵심 구성요소라 끌 수 없다.
+# (예전 차트에 있던 applicationSet.enabled 키가 없어졌다)
+# 쓰지 않지만 파드 하나를 감수한다.
 applicationSet:
-  enabled: false
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
 
 controller:
   resources:

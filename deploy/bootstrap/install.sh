@@ -54,14 +54,26 @@ log "Helm 저장소 준비"
 helm repo add argo https://argoproj.github.io/argo-helm >/dev/null
 helm repo update argo >/dev/null
 
+# helm --wait을 쓰지 않는다. Helm 4에서 대기 중 취소되면 릴리스가 failed로 남고
+# 만들던 리소스까지 사라져 원인을 찾기 어렵다. 설치와 대기를 분리하면
+# 어느 컴포넌트가 준비되지 않았는지 그대로 보인다.
 log "ArgoCD 설치 (차트 ${ARGOCD_CHART_VERSION})"
 helm upgrade --install argocd argo/argo-cd \
   --namespace "$ARGOCD_NAMESPACE" \
   --create-namespace \
   --version "$ARGOCD_CHART_VERSION" \
-  --values "${SCRIPT_DIR}/values-argocd.yaml" \
-  --wait \
-  --timeout 10m
+  --values "${SCRIPT_DIR}/values-argocd.yaml"
+
+log "기동 대기"
+for target in \
+  statefulset/argocd-application-controller \
+  deployment/argocd-repo-server \
+  deployment/argocd-server \
+  deployment/argocd-redis
+do
+  echo "  ${target}"
+  kubectl rollout status "$target" -n "$ARGOCD_NAMESPACE" --timeout=5m
+done
 
 # --- 뿌리 Application 적용 ---------------------------------------------------
 
