@@ -14,7 +14,9 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/alexgim961101/adspectrum.git
+    # 비공개 저장소라 SSH로 접근한다. install.sh가 읽기 전용 배포 키를
+    # argocd 네임스페이스의 repository 시크릿으로 등록한다.
+    repoURL: git@github.com:alexgim961101/adspectrum.git
     targetRevision: main
     path: deploy/apps
 

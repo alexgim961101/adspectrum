@@ -65,6 +65,27 @@ aws iam create-open-id-connect-provider \
   --client-id-list sts.amazonaws.com
 ```
 
+### ArgoCD 배포 키 (최초 1회)
+
+저장소가 비공개라 ArgoCD가 clone하려면 자격이 필요하다. 개인 SSH 키 대신 이 저장소에만
+유효한 **읽기 전용 배포 키**를 쓴다. 유출되어도 다른 저장소에 영향이 없고 쓰기도 불가능하다.
+
+```sh
+ssh-keygen -t ed25519 -f ~/.ssh/adspectrum-argocd-deploy -N "" -C "argocd-readonly@adspectrum"
+gh repo deploy-key add ~/.ssh/adspectrum-argocd-deploy.pub \
+  --repo alexgim961101/adspectrum --title argocd-readonly
+```
+
+키는 홈 디렉터리에만 두고 저장소에 커밋하지 않는다. `install.sh`가 이 파일을 읽어
+argocd 네임스페이스에 repository 시크릿을 만든다. 클러스터를 다시 만들어도 키는 그대로
+재사용하므로 이 절차는 반복하지 않는다.
+
+키를 분실하면 GitHub에서 기존 배포 키를 지우고 위 명령을 다시 실행한다.
+
+```sh
+gh repo deploy-key list --repo alexgim961101/adspectrum
+```
+
 ---
 
 ## 3. 인프라 생성
@@ -131,6 +152,51 @@ aws dynamodb describe-table --table-name adspectrum-metrics --region ap-northeas
 aws ecr describe-repositories --region ap-northeast-2 \
   --query 'repositories[?starts_with(repositoryName, `adspectrum/`)].repositoryName'
 ```
+
+---
+
+## 4b. ArgoCD 부트스트랩
+
+인프라가 준비된 뒤 한 번만 실행한다. 이후 클러스터 안의 모든 변경은 Git을 통해서만 이루어진다.
+
+```sh
+deploy/bootstrap/install.sh
+```
+
+스크립트는 실행 전에 kubectl 컨텍스트가 대상 클러스터를 가리키는지 확인한다.
+다른 클러스터에 설치하는 사고를 막기 위한 것이며, 어긋나면 전환 명령과 함께 중단한다.
+
+### 동기화 확인
+
+```sh
+kubectl get applications -n argocd
+```
+
+`root`와 자식 4개(`aws-load-balancer-controller`, `keda`, `argo-rollouts`,
+`kube-prometheus-stack`)가 모두 `Synced` / `Healthy`여야 한다.
+
+### UI 접근
+
+외부에 노출하지 않으므로 port-forward로 접근한다. ALB를 띄우지 않아 비용과 공격 표면을 모두 줄인다.
+
+```sh
+kubectl port-forward -n argocd svc/argocd-server 8080:80
+# http://localhost:8080 · 사용자 admin
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d; echo
+```
+
+### 메모리 여유 확인
+
+노드 2대의 할당 가능 메모리가 약 6.4GiB뿐이라 플랫폼 컴포넌트가 다 올라간 뒤 확인해야 한다
+(DECISIONS 001).
+
+```sh
+kubectl get pods -A --field-selector=status.phase=Pending
+kubectl describe nodes | grep -A 5 "Allocated resources"
+```
+
+`Pending` 파드가 있고 사유가 메모리 부족이면 노드 타입 상향을 검토한다.
 
 ---
 

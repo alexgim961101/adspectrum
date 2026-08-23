@@ -12,6 +12,12 @@ REGION="${AWS_REGION:-ap-northeast-2}"
 ARGOCD_NAMESPACE="argocd"
 ARGOCD_CHART_VERSION="10.4.0"
 
+# 비공개 저장소를 읽기 위한 배포 키. 저장소에 커밋하지 않으며
+# 최초 1회 발급 절차는 RUNBOOK 2장에 있다.
+REPO_URL="${REPO_URL:-git@github.com:alexgim961101/adspectrum.git}"
+DEPLOY_KEY="${DEPLOY_KEY:-$HOME/.ssh/adspectrum-argocd-deploy}"
+REPO_SECRET_NAME="adspectrum-repo"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
@@ -36,6 +42,10 @@ echo "  ${current_context}"
 kubectl get nodes >/dev/null 2>&1 || fail "클러스터에 접근할 수 없다. 자격증명과 네트워크를 확인한다."
 echo "  노드 $(kubectl get nodes --no-headers | wc -l | tr -d ' ')대 확인"
 
+[ -f "$DEPLOY_KEY" ] || fail "배포 키가 없다: ${DEPLOY_KEY}
+  비공개 저장소를 읽으려면 읽기 전용 배포 키가 필요하다. RUNBOOK 2장 참조."
+echo "  배포 키 확인"
+
 # --- ArgoCD 설치 -------------------------------------------------------------
 # ArgoCD 자신은 GitOps로 관리하지 않는다. 자기 자신을 동기화하다 실패하면
 # 복구 수단까지 사라지기 때문이다. 여기서만 설치하고 갱신한다.
@@ -54,6 +64,29 @@ helm upgrade --install argocd argo/argo-cd \
   --timeout 10m
 
 # --- 뿌리 Application 적용 ---------------------------------------------------
+
+# --- 저장소 접근 자격 등록 -------------------------------------------------
+# 비공개 저장소이므로 ArgoCD가 clone할 수단이 필요하다. 개인 SSH 키 대신
+# 이 저장소에만 유효한 읽기 전용 배포 키를 쓴다. 키가 유출되어도 다른
+# 저장소에 영향이 없고 쓰기도 불가능하다.
+#
+# 이 시크릿이 GitOps 바깥에 있는 이유: Git에 넣으려면 개인키를 커밋해야 하고,
+# 그러면 저장소를 읽을 수 있는 사람이 곧 키를 얻는다. 부트스트랩 시점에만
+# 사람이 주입하는 것이 이 프로젝트 범위에서 가장 단순한 방법이다.
+# (외부 비밀 저장소 연동은 SPEC 12장에서 범위 제외)
+
+log "저장소 접근 자격 등록"
+kubectl create secret generic "$REPO_SECRET_NAME" \
+  --namespace "$ARGOCD_NAMESPACE" \
+  --from-literal=type=git \
+  --from-literal=url="$REPO_URL" \
+  --from-file=sshPrivateKey="$DEPLOY_KEY" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl label secret "$REPO_SECRET_NAME" \
+  --namespace "$ARGOCD_NAMESPACE" \
+  argocd.argoproj.io/secret-type=repository --overwrite >/dev/null
+echo "  ${REPO_URL}"
 
 log "app-of-apps 뿌리 적용"
 kubectl apply -f "${SCRIPT_DIR}/root-app.yaml"
