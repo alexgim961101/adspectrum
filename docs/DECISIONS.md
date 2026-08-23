@@ -53,11 +53,17 @@ consumer는 SQS를 폴링해 DynamoDB에 집계를 반영하는 가벼운 워커
 
 B는 메모리 부족이 실제로 관측된 뒤에 쓴다. 지금 인스턴스를 키우면 원인 확인 없이 비용부터 늘리는 셈이다.
 
+### 검증 결과 (2026-08-23)
+
+첫 `apply` 후 두 노드 모두 `allocatable.pods = 110`으로 확인됐다. `aws-node`에 `ENABLE_PREFIX_DELEGATION=true`,
+`WARM_PREFIX_TARGET=1`이 적용된 것도 확인했다. 애드온을 노드그룹보다 먼저 적용한 순서가 의도대로 동작했다.
+
 ### 남는 위험
 
-prefix delegation은 노드가 실제로 파드를 110개까지 띄울 수 있다는 뜻이 아니다. IP 제약이 사라진 뒤의
-한계는 CPU와 메모리이므로, 2일차에 플랫폼 컴포넌트를 올린 직후 `kubectl top nodes`로 여유를 확인하고
-부족하면 B로 전환한다.
+IP 제약은 사라졌지만 한계가 메모리로 옮겨갔다. 측정된 할당 가능 메모리는 노드당 약 3.2GiB,
+2대 합계 약 6.4GiB다. 여기에 ArgoCD, kube-prometheus-stack, KEDA, Argo Rollouts, ALB Controller가
+올라가면 여유가 크지 않다. 2일차에 플랫폼 컴포넌트를 올린 직후 파드가 `Pending`에 걸리는지 확인하고,
+메모리 부족이 원인이면 그때 B(t3.large)로 전환한다. 지금 미리 인스턴스를 키우지는 않는다.
 
 ---
 
