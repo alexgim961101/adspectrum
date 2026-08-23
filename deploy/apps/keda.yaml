@@ -1,0 +1,48 @@
+# SQS 큐 길이를 보고 consumer 레플리카를 조절한다.
+# 5일차 ScaledObject가 이 오퍼레이터를 대상으로 동작한다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keda
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://kedacore.github.io/charts
+    chart: keda
+    targetRevision: 2.20.2
+    helm:
+      values: |
+        serviceAccount:
+          operator:
+            create: true
+            name: keda-operator
+            # 큐 길이 조회 권한은 파드가 아니라 오퍼레이터가 갖는다.
+            # ScaledObject에서 identityOwner를 operator로 지정해 이 권한을 쓴다.
+            annotations:
+              eks.amazonaws.com/role-arn: arn:aws:iam::894759291324:role/adspectrum-keda-operator
+
+        resources:
+          operator:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+          metricServer:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: keda
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

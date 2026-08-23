@@ -40,6 +40,12 @@ variable "keda_namespace" {
   default     = "keda"
 }
 
+variable "alb_controller_namespace" {
+  description = "AWS Load Balancer Controller 네임스페이스"
+  type        = string
+  default     = "kube-system"
+}
+
 variable "monitoring_namespace" {
   description = "kube-prometheus-stack 네임스페이스"
   type        = string

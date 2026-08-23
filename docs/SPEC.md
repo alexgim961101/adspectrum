@@ -174,6 +174,7 @@ adspectrum/
 | metrics-api | `dynamodb:Query` |
 | keda-operator | `sqs:GetQueueAttributes` |
 | grafana | CloudWatch 읽기 (큐 깊이 패널용) |
+| aws-load-balancer-controller | ALB 수명주기 관리 — 벤더 공식 정책 사용 (DECISIONS 004) |
 
 - GitHub Actions용 IAM 역할은 **OIDC 신뢰 정책**(리포 조건 포함)으로 만들고 ECR push 권한만 부여한다. 장기 액세스 키를 만들지 않는다.
 - AWS Budgets: 월 8만 원 초과 시 이메일 알람.
