@@ -1,0 +1,48 @@
+# Ingress 리소스를 보고 실제 ALB를 만들어 주는 컨트롤러.
+# 3일차 metrics-api 노출과 6일차 카나리 트래픽 분할이 모두 이것에 의존한다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: 3.5.0
+    helm:
+      values: |
+        clusterName: adspectrum-eks
+
+        serviceAccount:
+          create: true
+          # IRSA 신뢰 정책이 이 이름을 고정하고 있으므로 명시한다.
+          # 비워 두면 릴리스 이름에서 생성되어 어긋날 수 있다.
+          name: aws-load-balancer-controller
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::894759291324:role/adspectrum-aws-load-balancer-controller
+
+        # VPC ID는 지정하지 않는다. apply할 때마다 바뀌므로 컨트롤러가
+        # 인스턴스 메타데이터에서 스스로 찾게 둔다.
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # CRD가 커서 기존 방식으로는 어노테이션 크기 제한에 걸린다.
+      - ServerSideApply=true

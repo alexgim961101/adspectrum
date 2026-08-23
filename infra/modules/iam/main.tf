@@ -26,6 +26,13 @@ locals {
       service_account = var.grafana_service_account
       policy          = data.aws_iam_policy_document.grafana.json
     }
+
+    # 유일하게 직접 작성하지 않은 정책이다. 아래 policies/ 파일 주석 참조.
+    "aws-load-balancer-controller" = {
+      namespace       = var.alb_controller_namespace
+      service_account = "aws-load-balancer-controller"
+      policy          = file("${path.module}/policies/aws-load-balancer-controller.json")
+    }
   }
 }
 
