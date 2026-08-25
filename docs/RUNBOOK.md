@@ -155,6 +155,73 @@ aws ecr describe-repositories --region ap-northeast-2 \
 
 ---
 
+## 4a. 앱 이미지 빌드와 푸시
+
+ArgoCD가 앱을 동기화하려면 ECR에 이미지가 먼저 있어야 한다. 4일차부터는 CI가 대신하므로
+이 절차는 손으로 배포하거나 CI 없이 재현할 때만 쓴다.
+
+### 로컬 검증
+
+앱마다 독립 패키지라 디렉터리를 옮겨 가며 실행한다.
+
+```sh
+cd apps/ad-event-generator   # event-consumer, metrics-api도 같다
+uv sync
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+```
+
+컨테이너 밖에서 직접 실행할 때는 `PYTHONPATH`가 필요하다. 패키지로 설치하지 않고
+소스를 그대로 쓰기 때문이며, 이미지 안에서는 `ENV PYTHONPATH=/app/src`가 같은 일을 한다.
+
+```sh
+PYTHONPATH=src uv run python -m generator.main
+```
+
+### 빌드와 푸시
+
+```sh
+aws ecr get-login-password --region ap-northeast-2 \
+  | docker login --username AWS --password-stdin \
+    894759291324.dkr.ecr.ap-northeast-2.amazonaws.com
+
+TAG=$(git rev-parse --short HEAD)
+for app in ad-event-generator event-consumer metrics-api; do
+  docker buildx build --platform linux/amd64 \
+    -t 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/$app:$TAG \
+    --push apps/$app
+done
+```
+
+**`--platform linux/amd64`를 빼면 안 된다.** 개발 환경이 Apple Silicon(arm64)이고 노드는
+`t3.medium`(amd64)이라, 기본값으로 빌드하면 파드가 `exec format error`로 죽는다
+(DECISIONS 008). CI는 x86 러너에서 돌아 이 실수가 드러나지 않으므로 로컬에서만 주의하면 된다.
+
+**ECR 리포지토리는 태그 불변(IMMUTABLE)이다.** 같은 태그를 두 번 밀 수 없다. 이미지를
+다시 구우려면 커밋을 하나 더 쌓아 새 SHA를 만든다. 태그가 곧 배포 산출물의 신원이라
+같은 태그가 다른 내용을 가리키는 상황을 원천 차단한 것이다.
+
+### 태그 반영
+
+```sh
+sed -i '' "s/^  tag: \"\"$/  tag: \"$TAG\"/" deploy/values/*.yaml
+git commit -am "chore(deploy): 이미지 태그 갱신 [skip ci]"
+git push origin main
+```
+
+ArgoCD는 Git만 본다. 푸시하지 않으면 ECR에 이미지가 있어도 배포되지 않는다.
+
+### 확인
+
+```sh
+aws ecr describe-images --region ap-northeast-2 \
+  --repository-name adspectrum/metrics-api \
+  --query 'imageDetails[].imageTags' --output text
+```
+
+---
+
 ## 4b. ArgoCD 부트스트랩
 
 인프라가 준비된 뒤 한 번만 실행한다. 이후 클러스터 안의 모든 변경은 Git을 통해서만 이루어진다.
@@ -172,8 +239,14 @@ deploy/bootstrap/install.sh
 kubectl get applications -n argocd
 ```
 
-`root`와 자식 4개(`aws-load-balancer-controller`, `keda`, `argo-rollouts`,
-`kube-prometheus-stack`)가 모두 `Synced` / `Healthy`여야 한다.
+`root`와 자식 7개가 모두 `Synced` / `Healthy`여야 한다.
+
+| 플랫폼 | 앱 |
+|---|---|
+| `aws-load-balancer-controller`, `keda`, `argo-rollouts`, `kube-prometheus-stack` | `ad-event-generator`, `event-consumer`, `metrics-api` |
+
+앱 3종은 `deploy/values/`의 이미지 태그가 ECR에 실제로 있어야 동기화된다. 태그가 비어 있으면
+차트의 `required`가 걸려 렌더링 단계에서 실패한다 (4a 참조).
 
 ### UI 접근
 

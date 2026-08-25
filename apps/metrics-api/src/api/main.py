@@ -24,7 +24,11 @@ def main() -> None:
     )
     # log_config=None을 주지 않으면 uvicorn이 자기 로깅 설정으로 루트 핸들러를
     # 덮어써서 JSON 로그가 평문으로 돌아간다.
-    uvicorn.run(app, host="0.0.0.0", port=settings.port, log_config=None)
+    #
+    # 액세스 로그는 끈다. 5초마다 오는 프로브와 15초마다 오는 스크레이프가
+    # 로그의 대부분을 차지해 실제 사건이 묻힌다. 요청 수·지연·상태 코드는
+    # /metrics의 히스토그램에 이미 다 들어 있다.
+    uvicorn.run(app, host="0.0.0.0", port=settings.port, log_config=None, access_log=False)
 
 
 if __name__ == "__main__":
