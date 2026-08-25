@@ -21,6 +21,19 @@ spec:
         {{- include "app.labels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      # 레플리카가 같은 노드에 몰리면 spot 회수 한 번에 API가 통째로 내려간다
+      # (SPEC 13장의 위험 항목). 노드별로 고르게 흩는다.
+      #
+      # ScheduleAnyway라 노드가 하나뿐이면 그냥 같은 노드에 뜬다. DoNotSchedule로
+      # 두면 노드가 한 대 남은 상황에서 파드가 Pending에 걸려, 가용성을 지키려던
+      # 설정이 오히려 가용성을 깨뜨린다.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "app.selectorLabels" . | nindent 14 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
