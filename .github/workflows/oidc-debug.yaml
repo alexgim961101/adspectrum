@@ -1,0 +1,25 @@
+# 일회성 진단용. OIDC 토큰의 클레임만 출력한다 (토큰 자체는 찍지 않는다).
+# 원인을 확인한 뒤 삭제한다.
+name: oidc-debug
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 토큰 클레임 확인
+        run: |
+          set -euo pipefail
+          token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
+          payload=$(cut -d. -f2 <<< "$token")
+          pad=$(( (4 - ${#payload} % 4) % 4 ))
+          printf -v padding '%*s' "$pad" ''
+          printf '%s%s' "$payload" "${padding// /=}" | tr '_-' '/+' | base64 -d \
+            | jq '{sub, aud, repository, repository_owner, ref, event_name, iss}'
