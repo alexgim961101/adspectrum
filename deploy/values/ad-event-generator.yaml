@@ -2,7 +2,7 @@
 # image.tag는 CI가 갱신한다 (4일차). 손으로 고치면 다음 CI 실행이 덮어쓴다.
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/ad-event-generator
-  tag: ""
+  tag: "19756b5"
 
 serviceAccount:
   name: ad-event-generator
