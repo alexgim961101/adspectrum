@@ -334,20 +334,40 @@ terraform destroy
 rm -f tfplan
 ```
 
-### 2일차 이후의 주의
+### Ingress가 있으면 ALB를 먼저 회수한다
 
-ArgoCD로 Ingress를 배포한 뒤부터는 destroy가 한 번에 끝나지 않는다. AWS Load Balancer
-Controller가 만든 ALB는 Terraform이 모르는 리소스인데 서브넷과 보안 그룹을 점유하고
-있어서, VPC 삭제 단계에서 막힌다. 클러스터 안의 Ingress를 먼저 지워 ALB가 회수되기를
-기다린 뒤 destroy한다. `[미검증]`
+3일차에 metrics-api를 노출한 뒤부터는 destroy가 한 번에 끝나지 않는다. ALB는
+AWS Load Balancer Controller가 Ingress를 보고 만든 것이라 **Terraform state에 없는데**
+서브넷과 보안 그룹을 점유하고 있어서 VPC 삭제 단계에서 막힌다.
+
+Ingress를 그냥 지우면 안 된다. ArgoCD의 `selfHeal`이 3분 안에 되살리고, 그러면
+**ALB가 새로 하나 더 생긴다.** 자동 동기화를 먼저 끈다.
 
 ```sh
-kubectl delete ingress --all --all-namespaces
-# ALB가 사라질 때까지 대기
-aws elbv2 describe-load-balancers --region ap-northeast-2 \
-  --query 'LoadBalancers[].LoadBalancerName'
+# 1. root와 metrics-api의 자동 동기화 중지
+#    root를 함께 끄지 않으면 root가 metrics-api Application을 원상 복구한다
+for app in root metrics-api; do
+  kubectl patch application "$app" -n argocd --type merge \
+    -p '{"spec":{"syncPolicy":{"automated":null}}}'
+done
+
+# 2. Ingress 삭제
+kubectl delete ingress metrics-api -n adspectrum
+
+# 3. ALB가 사라질 때까지 대기 (실측 약 1분)
+until [ -z "$(aws elbv2 describe-load-balancers --region ap-northeast-2 \
+    --query 'LoadBalancers[?contains(LoadBalancerName,`adspectrum`)].LoadBalancerArn' \
+    --output text)" ]; do sleep 15; done
+
+# 4. 타깃 그룹까지 회수됐는지 확인 (비어 있어야 한다)
+aws elbv2 describe-target-groups --region ap-northeast-2 \
+  --query 'TargetGroups[?contains(TargetGroupName,`adspectrum`)].TargetGroupName'
+
 terraform destroy
 ```
+
+컨트롤러는 ALB와 타깃 그룹, 자기가 만든 보안 그룹까지 스스로 정리한다. 4일차 destroy에서
+확인했고, 남은 보안 그룹은 전부 Terraform이 만든 EKS 것뿐이었다.
 
 ### 삭제 후 남는 것
 
@@ -362,6 +382,21 @@ terraform destroy
 | `~/.ssh/adspectrum-argocd-deploy` | 남음 | 위와 같은 이유로 유지한다 |
 | NAT Gateway | `deleted` 상태로 잠시 표시 | AWS가 삭제 기록을 일정 기간 보여준다. 과금 없음 |
 | VPC · EKS · SQS · DynamoDB · ECR · IAM 역할 · 예산 | 전부 삭제됨 | — |
+
+### 다시 올릴 때: ECR이 비어 있다
+
+`force_delete = true`라 destroy가 ECR 리포지토리를 이미지째 지운다. 그래야 destroy가
+수동 개입 없이 끝난다(성공 기준 1). 대신 다시 `apply`하면 리포지토리가 빈 상태로 생기고,
+`deploy/values`에 적힌 태그를 가리키는 이미지가 없어 ArgoCD 동기화가 실패한다.
+
+부트스트랩 전에 4a의 빌드·푸시를 한 번 돌린다. 태그를 `deploy/values`에 적힌 값과 똑같이
+주면 커밋을 새로 만들 필요가 없다.
+
+```sh
+grep -h '  tag:' deploy/values/*.yaml    # 지금 배포에 걸려 있는 태그 확인
+```
+
+앱을 고칠 예정이라면 그냥 push해서 CI에 맡기는 편이 빠르다.
 
 ### 삭제 확인
 
