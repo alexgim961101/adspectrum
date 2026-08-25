@@ -63,6 +63,16 @@ variable "github_repository" {
   type        = string
 }
 
+variable "github_repository_owner_id" {
+  description = "GitHub 소유자의 숫자 ID. `gh api users/<owner> --jq .id`"
+  type        = string
+}
+
+variable "github_repository_id" {
+  description = "GitHub 저장소의 숫자 ID. `gh api repos/<owner>/<repo> --jq .id`"
+  type        = string
+}
+
 variable "github_branch" {
   description = "ECR 푸시를 허용할 브랜치. 이 브랜치의 워크플로만 역할을 맡을 수 있다"
   type        = string
