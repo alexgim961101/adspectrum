@@ -1,0 +1,14 @@
+# image.tag는 CI가 갱신한다 (4일차).
+image:
+  repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/metrics-api
+  tag: ""
+
+serviceAccount:
+  name: metrics-api
+  roleArn: arn:aws:iam::894759291324:role/adspectrum-metrics-api
+
+env:
+  TABLE_NAME: adspectrum-metrics
+  AWS_REGION: ap-northeast-2
+  # 6일차 카나리 롤백 데모에서만 0이 아닌 값으로 올린다.
+  FAULT_RATE: "0"

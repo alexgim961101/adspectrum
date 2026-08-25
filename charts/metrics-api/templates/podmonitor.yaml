@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    # Service가 아니라 파드를 직접 긁는다. 6일차에 카나리 파드와 안정 파드가
+    # 동시에 뜨는데, Service 경유로는 둘을 구분할 수 없다.
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.interval }}

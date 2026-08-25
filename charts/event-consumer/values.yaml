@@ -1,0 +1,35 @@
+# 실제 값은 deploy/values/event-consumer.yaml이 덮어쓴다.
+
+# 5일차에 KEDA ScaledObject가 이 값을 대신 관리한다. 그때 ArgoCD가 레플리카 수를
+# 되돌리지 않도록 ignoreDifferences를 함께 넣어야 한다.
+replicaCount: 1
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  name: event-consumer
+  roleArn: ""
+
+env:
+  QUEUE_URL: ""
+  TABLE_NAME: ""
+  BATCH_SIZE: "10"
+  AWS_REGION: ap-northeast-2
+
+metrics:
+  port: 9090
+  interval: 15s
+
+# 롱 폴링 20초 + 집계 쓰기가 끝날 시간을 준다. 기본값 30초로는 KEDA scale-in이나
+# spot 회수 때 처리 중이던 배치가 잘려 그만큼 중복 재전달된다.
+terminationGracePeriodSeconds: 60
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

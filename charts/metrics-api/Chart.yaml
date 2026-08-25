@@ -1,0 +1,6 @@
+apiVersion: v2
+name: metrics-api
+description: 집계된 캠페인 성과를 조회하는 API. Argo Rollouts 카나리 대상
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

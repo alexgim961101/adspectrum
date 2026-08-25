@@ -1,0 +1,40 @@
+# 차트는 charts/event-consumer, 값은 deploy/values/event-consumer.yaml에 있다.
+# 둘이 다른 디렉터리라 소스를 둘로 나눈다. ref로 이름 붙인 소스는 파일을
+# 가져오기만 하고 렌더링하지 않는다 ($values 참조).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: event-consumer
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: git@github.com:alexgim961101/adspectrum.git
+      targetRevision: main
+      path: charts/event-consumer
+      helm:
+        valueFiles:
+          - $values/deploy/values/event-consumer.yaml
+    - repoURL: git@github.com:alexgim961101/adspectrum.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: adspectrum
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

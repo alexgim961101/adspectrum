@@ -8,7 +8,7 @@ ArgoCD가 되돌린다(`selfHeal`). 유일한 예외는 `bootstrap/`이며, Argo
 deploy/
 ├── bootstrap/   ArgoCD 설치 스크립트와 app-of-apps의 뿌리 (1회 수동 실행)
 ├── apps/        뿌리가 관리하는 자식 Application. 파일 하나가 컴포넌트 하나
-└── values/      애플리케이션 values. CI가 이미지 태그를 여기에 갱신한다 (3일차)
+└── values/      애플리케이션 values. CI가 이미지 태그를 여기에 갱신한다
 ```
 
 ## 동작 방식
@@ -25,12 +25,32 @@ install.sh ──Helm──▶ ArgoCD
 
 ## 컴포넌트
 
-| 파일 | 무엇 | 쓰이는 시점 |
+플랫폼 컴포넌트는 외부 Helm 저장소를, 앱 3종은 이 레포의 `charts/`를 바라본다.
+
+| 파일 | 무엇 | 차트 출처 |
 |---|---|---|
-| `aws-load-balancer-controller.yaml` | Ingress → 실제 ALB 생성 | 3일차 API 노출, 6일차 카나리 |
-| `keda.yaml` | 큐 길이 기반 오토스케일링 | 5일차 |
-| `argo-rollouts.yaml` | 카나리 배포와 자동 롤백 | 6일차 |
-| `kube-prometheus-stack.yaml` | Prometheus, Grafana, kube-state-metrics | 5·6일차 관측 |
+| `aws-load-balancer-controller.yaml` | Ingress → 실제 ALB 생성 | 외부 |
+| `keda.yaml` | 큐 길이 기반 오토스케일링 | 외부 |
+| `argo-rollouts.yaml` | 카나리 배포와 자동 롤백 | 외부 |
+| `kube-prometheus-stack.yaml` | Prometheus, Grafana, kube-state-metrics | 외부 |
+| `ad-event-generator.yaml` | 이벤트 시뮬레이터 | `charts/ad-event-generator` |
+| `event-consumer.yaml` | SQS → DynamoDB 집계 | `charts/event-consumer` |
+| `metrics-api.yaml` | 조회 API (Rollout) | `charts/metrics-api` |
+
+## 앱 Application이 소스를 둘 쓰는 이유
+
+차트는 `charts/<앱>/`에, 값은 `deploy/values/<앱>.yaml`에 있다. 서로 다른 디렉터리라
+`sources`를 둘로 나누고, 값 쪽 소스에 `ref: values`라는 이름을 붙여
+`$values/deploy/values/<앱>.yaml`로 참조한다. `ref`만 있는 소스는 파일을 가져오기만 하고
+렌더링하지 않는다.
+
+값을 차트 안에 두면 간단해지지만, CI가 이미지 태그를 갱신할 때 `charts/`를 건드리게 된다.
+그러면 CI 트리거의 `paths` 필터(`apps/**`, `charts/**`)에 걸려 빌드가 자기 자신을 다시 부른다.
+값을 `deploy/` 아래로 뺀 것은 그 고리를 끊기 위한 경로 분리다.
+
+**이미지 태그에는 기본값이 없다.** 차트가 `required`로 막아 두어서 태그가 비면 렌더링 단계에서
+실패한다. `latest`로 조용히 배포되거나, CI가 갱신을 빠뜨린 채 이전 이미지가 그대로 도는 것보다
+동기화가 실패하는 편이 낫다.
 
 ## 값을 고칠 때 주의할 것
 

@@ -1,0 +1,31 @@
+[project]
+name = "ad-event-generator"
+version = "0.1.0"
+description = "광고 성과 이벤트를 생성해 SQS에 발행한다"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "boto3>=1.40.0",
+    "prometheus-client>=0.23.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "ruff>=0.14.0",
+]
+
+# 배포하는 라이브러리가 아니라 컨테이너로 실행하는 애플리케이션이다.
+# 패키지로 빌드하지 않으므로 build-system도 필요 없다. 코드는 PYTHONPATH=src로 찾는다.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

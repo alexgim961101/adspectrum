@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ad-event-generator
+description: 광고 성과 이벤트를 생성해 SQS에 발행하는 시뮬레이터
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
