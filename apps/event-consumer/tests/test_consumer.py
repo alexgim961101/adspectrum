@@ -145,3 +145,15 @@ def test_run_exits_after_stop():
     consumer.run()
 
     assert len(sqs.receive_calls) == 1
+
+
+def test_every_event_type_has_a_series_before_the_first_poll():
+    from prometheus_client import REGISTRY
+
+    for event_type in ("impression", "click", "conversion"):
+        assert (
+            REGISTRY.get_sample_value(
+                "adspectrum_events_consumed_total", {"event_type": event_type}
+            )
+            is not None
+        )
