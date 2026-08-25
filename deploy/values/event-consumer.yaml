@@ -1,12 +1,10 @@
 # image.tag는 CI가 갱신한다 (4일차).
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/event-consumer
-  tag: "19756b5"
-
+  tag: "8a48c64"
 serviceAccount:
   name: event-consumer
   roleArn: arn:aws:iam::894759291324:role/adspectrum-event-consumer
-
 env:
   QUEUE_URL: https://sqs.ap-northeast-2.amazonaws.com/894759291324/adspectrum-events
   TABLE_NAME: adspectrum-metrics
