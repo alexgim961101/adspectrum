@@ -78,3 +78,14 @@ def test_publish_skips_the_api_call_for_an_empty_batch():
 
     assert Publisher(sqs, QUEUE_URL).publish([]) == 0
     assert sqs.calls == []
+
+
+def test_every_event_type_has_a_series_before_the_first_publish():
+    # 값이 0이어도 시계열은 존재해야 한다. 없으면 대시보드가 "No data"를 그린다.
+    for event_type in ("impression", "click", "conversion"):
+        assert (
+            REGISTRY.get_sample_value(
+                "adspectrum_events_published_total", {"event_type": event_type}
+            )
+            is not None
+        )
