@@ -22,3 +22,4 @@ ad-event-generator (노출/클릭 시뮬레이터)
 - [설계 스펙](docs/SPEC.md) — 아키텍처, 컴포넌트 스펙, 일정, 컷라인
 - [실행 절차](docs/RUNBOOK.md) — 로컬 준비, 인프라 생성·확인·삭제, 문제 해결
 - [의사결정 기록](docs/DECISIONS.md) — 구현 중 내린 판단과 근거, 겪은 문제
+- [외부 계약](docs/API.md) — 이벤트 스키마, 집계 모델, metrics-api 엔드포인트
