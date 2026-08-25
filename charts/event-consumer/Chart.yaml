@@ -1,0 +1,6 @@
+apiVersion: v2
+name: event-consumer
+description: SQS의 광고 이벤트를 분 단위로 집계해 DynamoDB에 반영한다
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

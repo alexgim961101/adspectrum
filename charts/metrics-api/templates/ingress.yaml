@@ -1,0 +1,30 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # ip 모드는 ALB가 노드가 아니라 파드 IP를 직접 대상으로 잡는다. VPC CNI가
+    # 파드에 VPC IP를 주기 때문에 가능하고, 6일차 가중치 카나리에도 필요하다.
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    # 같은 그룹의 Ingress들이 ALB 하나를 공유한다. ALB는 시간당 과금이라
+    # 개수를 늘리지 않는 편이 낫다.
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "app.name" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

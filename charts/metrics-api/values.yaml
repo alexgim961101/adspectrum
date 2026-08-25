@@ -1,0 +1,40 @@
+# 실제 값은 deploy/values/metrics-api.yaml이 덮어쓴다.
+
+replicaCount: 2
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  name: metrics-api
+  roleArn: ""
+
+env:
+  TABLE_NAME: ""
+  AWS_REGION: ap-northeast-2
+  # 카나리 자동 롤백 데모(6일차) 전용 장치. 평소에는 0이어야 한다.
+  FAULT_RATE: "0"
+
+service:
+  port: 80
+
+# API 포트가 지표 포트를 겸한다. /metrics를 같은 서버에 마운트했다.
+containerPort: 8000
+
+metrics:
+  interval: 15s
+
+ingress:
+  enabled: true
+  # 도메인이 없으므로 ALB 기본 DNS + HTTP로 노출한다 (SPEC 12장).
+  className: alb
+  groupName: adspectrum
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

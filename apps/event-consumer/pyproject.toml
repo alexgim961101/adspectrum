@@ -1,0 +1,29 @@
+[project]
+name = "event-consumer"
+version = "0.1.0"
+description = "SQS의 광고 이벤트를 분 단위로 집계해 DynamoDB에 반영한다"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "boto3>=1.40.0",
+    "prometheus-client>=0.23.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "ruff>=0.14.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
