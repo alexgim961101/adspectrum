@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 
 TICK_SECONDS = 1.0
 
+# 배치를 순차로 보낸다. 클러스터 안에서 SendMessageBatch 1회를 재 보니 중앙값 12.6ms
+# (최소 11.6 / 최대 14.7)였고, 1초 예산 안에 배치 약 79개 = 초당 790건까지 들어간다.
+# 부하 시나리오의 300건/초는 배치 30개라 약 380ms로 끝난다. 동시 발행을 넣을 만한
+# 이유가 아직 없다 — 필요해지면 아래 run()의 "tick exceeded its budget" 경고가 먼저 뜬다.
+
 
 class Generator:
     """1초에 events_per_sec건을 발행하는 루프."""
