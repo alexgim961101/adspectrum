@@ -39,5 +39,7 @@ module "iam" {
   table_arn           = module.data.table_arn
   ecr_repository_arns = module.data.ecr_repository_arns
 
-  github_repository = local.github_repository
+  github_repository          = local.github_repository
+  github_repository_owner_id = local.github_repository_owner_id
+  github_repository_id       = local.github_repository_id
 }

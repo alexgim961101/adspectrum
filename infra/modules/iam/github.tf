@@ -5,6 +5,23 @@ data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
 
+locals {
+  # GitHub이 OIDC subject에 소유자·저장소의 숫자 ID를 함께 싣는 immutable subject로
+  # 전환했다. 이름은 바뀌거나 반납 후 남이 차지할 수 있지만 ID는 바뀌지 않는다.
+  # 이름만 고정하던 예전 형식(repo:owner/repo:ref:...)은 더 이상 토큰과 일치하지
+  # 않는다 (DECISIONS 010).
+  #
+  #   repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/<branch>
+  github_subject = format(
+    "repo:%s@%s/%s@%s:ref:refs/heads/%s",
+    split("/", var.github_repository)[0],
+    var.github_repository_owner_id,
+    split("/", var.github_repository)[1],
+    var.github_repository_id,
+    var.github_branch,
+  )
+}
+
 # 지정한 저장소의 지정한 브랜치에서 실행된 워크플로만 이 역할을 맡을 수 있다.
 # sub 조건을 저장소까지만 열어 두면 같은 저장소의 임의 브랜치나 PR에서도
 # 역할을 맡을 수 있으므로 브랜치까지 고정한다.
@@ -27,7 +44,7 @@ data "aws_iam_policy_document" "github_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"]
+      values   = [local.github_subject]
     }
   }
 }

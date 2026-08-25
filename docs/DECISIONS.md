@@ -387,3 +387,69 @@ A는 태그가 provider `default_tags`로 항상 붙기 때문에 VPC를 몇 번
 재전달된 메시지가 다음 번에는 다르게 처리되어야 하는데, 여기서는 그렇지 않았다.
 
 DLQ를 만들어 둔 것이 이 설계의 전제였고, 그 전제가 코드에서 성립하는지는 테스트가 확인했다.
+
+## 010. GitHub OIDC가 immutable subject로 바뀌어 CI 인증이 실패
+
+- 날짜: 2026-08-25
+- 상태: 해결
+
+### 증상
+
+4일차 CI의 첫 실행에서 변경 감지와 테스트는 통과했는데 ECR 푸시 단계가 죽었다.
+
+```
+Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
+```
+
+역할의 신뢰 정책, OIDC 공급자의 대상(audience), 워크플로의 `id-token: write` 권한을
+차례로 확인했지만 전부 정상이었다. 공급자도 `sts.amazonaws.com`을 허용하고 있었다.
+
+### 원인
+
+추측을 멈추고 토큰의 실제 클레임을 찍었다. 일회성 워크플로에서 OIDC 토큰을 발급받아
+페이로드만 디코드했다(토큰 자체는 출력하지 않는다).
+
+```json
+{
+  "sub": "repo:alexgim961101@74600075/adspectrum@1343590586:ref:refs/heads/main",
+  "aud": "sts.amazonaws.com",
+  "repository": "alexgim961101/adspectrum"
+}
+```
+
+GitHub이 **immutable subject claim**으로 전환해 `sub`에 소유자와 저장소의 숫자 ID를
+함께 싣고 있었다. 1일차에 작성한 신뢰 정책은 이름만 담은 예전 형식
+`repo:alexgim961101/adspectrum:ref:refs/heads/main`을 `StringEquals`로 고정하고 있어
+문자열이 달라 매칭에 실패한 것이다.
+
+`gh api repos/<owner>/<repo>/actions/oidc/customization/sub`가 `use_immutable_subject: false`를
+반환하는데도 실제 토큰은 ID가 박힌 형식이었다. 설정 값만 믿었다면 원인을 못 찾았을 것이다.
+
+### 선택지
+
+| 안 | 내용 | 평가 |
+|---|---|---|
+| A | 신뢰 정책을 ID가 박힌 새 형식으로 교체 | 토큰과 일치. ID는 불변이라 이름 변경에도 안전 |
+| B | 두 형식을 모두 허용 (`StringEquals`에 값 두 개) | 롤백 대비는 되지만 예전 형식의 취약점이 남는다 |
+| C | `sub`를 `StringLike`로 느슨하게 | 조건이 넓어져 고정 효과가 줄어든다 |
+
+### 결정
+
+**A.** `repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/<branch>` 형식으로 바꿨다.
+숫자 ID는 `locals.tf`에 두고, 확인 명령을 주석으로 남겼다.
+
+### 근거
+
+B는 예전 형식을 남겨 두는 것이고, 그 형식이 폐기되는 이유 자체가 보안 문제다. 저장소 이름은
+바꿀 수 있고 반납한 이름은 다른 사람이 가져갈 수 있다. 이름으로만 신뢰를 고정하면 그 경로로
+남의 저장소 워크플로가 우리 역할을 맡을 수 있다. GitHub이 ID를 넣기 시작한 게 정확히 그 구멍을
+막으려는 것이므로, 굳이 열어 둘 이유가 없다.
+
+숫자 ID가 매니페스트에 드러나는 가독성 손해는 있지만, 계정 ID를 그대로 적기로 한 결정
+(DECISIONS 005)과 같은 성격이다 — Git에 적힌 값이 곧 배포되는 값이어야 한다.
+
+### 배운 것
+
+인증 실패를 디버깅할 때 **설정을 세 번 읽는 것보다 토큰을 한 번 열어 보는 것이 빠르다.**
+이번에는 양쪽 설정이 모두 "맞게" 보였고, 틀린 것은 그 사이에 오가는 값이었다.
+GitHub API가 보고하는 설정과 실제 발급 토큰이 달랐다는 점도 같은 교훈이다.
