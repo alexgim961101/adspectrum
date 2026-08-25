@@ -1,7 +1,7 @@
 import time
 
-from fastapi import FastAPI, Request
-from prometheus_client import Counter, Histogram, make_asgi_app
+from fastapi import FastAPI, Request, Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 # Histogram 하나로 세 가지를 다 낸다. _count는 요청 수, status 라벨로 5xx 비율,
 # _bucket으로 p95. Counter를 따로 두면 같은 사실을 두 번 세게 된다.
@@ -37,7 +37,11 @@ def install(app: FastAPI) -> None:
         ).observe(time.perf_counter() - started)
         return response
 
-    app.mount(METRICS_PATH, make_asgi_app())
+    # mount가 아니라 라우트로 붙인다. mount는 슬래시가 없는 경로를 307로
+    # 되돌려 보내서 스크레이프 한 번에 요청이 두 번 찍힌다.
+    @app.get(METRICS_PATH, include_in_schema=False)
+    def scrape() -> Response:
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 def _route_template(request: Request) -> str:
