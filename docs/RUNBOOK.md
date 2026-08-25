@@ -273,6 +273,56 @@ kubectl describe nodes | grep -A 5 "Allocated resources"
 
 ---
 
+## 4c. CI (GitHub Actions)
+
+4일차부터는 `apps/**`를 고쳐 main에 push하면 배포까지 자동으로 간다.
+4a의 수동 절차는 CI 없이 재현하거나 급히 이미지를 구울 때만 쓴다.
+
+```
+push(main) ─▶ 변경 감지 ─▶ 검사(ruff·pytest) ─▶ 이미지 푸시(ECR)
+                                                      │
+                          deploy/values 태그 갱신 커밋 ◀┘
+                                     │
+                                     └─▶ ArgoCD가 감지해 배포
+```
+
+`pull_request`에서는 검사와 차트 렌더링까지만 돌고 AWS를 건드리는 잡은 실행되지 않는다.
+CI 역할의 신뢰 정책이 `refs/heads/main`으로 잠겨 있어 PR에서는 역할 자체를 맡을 수 없다.
+
+### 상태 확인
+
+```sh
+gh run list --limit 5
+gh run view <run-id> --json jobs --jq '.jobs[] | "\(.conclusion) \(.name)"'
+gh run view <run-id> --log-failed
+```
+
+### 다시 실행
+
+```sh
+gh run rerun <run-id> --failed
+```
+
+ECR이 태그 불변이라 같은 커밋을 다시 돌리면 푸시가 실패할 수 있는데, 워크플로가
+`describe-images`로 먼저 확인해 이미 있는 태그는 빌드를 건너뛴다.
+
+### 주의: 커밋 메시지에 `[skip ci]`를 쓰지 않는다
+
+CI가 되미는 태그 갱신 커밋에만 붙이는 표식이다. **GitHub은 커밋 메시지 본문까지 검사하므로**,
+설명하려고 적은 것도 그대로 인식해 실행을 건너뛴다. 이 프로젝트에서 실제로 겪었다
+(DECISIONS 011).
+
+### GitHub 저장소 ID가 바뀌면
+
+CI 역할의 신뢰 정책이 OIDC subject를 고정하는데, 여기에 저장소와 소유자의 숫자 ID가 들어간다
+(DECISIONS 010). 저장소를 새로 만들면 값을 다시 확인해 `infra/envs/dev/locals.tf`에 반영한다.
+
+```sh
+gh api repos/<owner>/<repo> --jq '{owner: .owner.id, repo: .id}'
+```
+
+---
+
 ## 5. 인프라 삭제
 
 작업을 마치면 반드시 내린다. EKS 컨트롤플레인과 NAT Gateway는 사용하지 않아도

@@ -2,11 +2,9 @@
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/metrics-api
   tag: "5d2bc96"
-
 serviceAccount:
   name: metrics-api
   roleArn: arn:aws:iam::894759291324:role/adspectrum-metrics-api
-
 env:
   TABLE_NAME: adspectrum-metrics
   AWS_REGION: ap-northeast-2
