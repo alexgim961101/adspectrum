@@ -35,6 +35,10 @@ htmlcov/
 kubeconfig
 kubeconfig-*
 
+# --- 로컬 도구 산출물 ---
+# 학습용으로 생성한 HTML 등 저장소 문서 체계(docs/) 밖의 로컬 파일
+.docs/
+
 # --- OS / 에디터 ---
 .DS_Store
 .idea/
