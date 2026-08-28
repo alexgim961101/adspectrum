@@ -9,5 +9,5 @@ serviceAccount:
 env:
   QUEUE_URL: https://sqs.ap-northeast-2.amazonaws.com/894759291324/adspectrum-events
   # 5일차 부하 시나리오에서 이 값을 300으로 올리는 커밋이 곧 부하 주입이다.
-  EVENTS_PER_SEC: "5"
+  EVENTS_PER_SEC: "300"
   AWS_REGION: ap-northeast-2
