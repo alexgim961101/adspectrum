@@ -1,7 +1,7 @@
 # ArgoCD가 charts/ad-event-generator에 이 값을 얹어 배포한다.
 # image.tag는 CI가 갱신한다 (4일차). 손으로 고치면 다음 CI 실행이 덮어쓴다.
 # 파드 하나가 초당 300건을 감당한다(실측). 그 이상은 파드를 늘려서 만든다.
-replicaCount: 2
+replicaCount: 0
 
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/ad-event-generator
