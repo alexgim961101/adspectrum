@@ -1,0 +1,38 @@
+# 카나리 단계마다 실행되는 판정 기준. Rollout이 이 템플릿을 참조한다.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "app.name" . }}-error-rate
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  args:
+    # Rollout이 단계마다 카나리 ReplicaSet의 해시를 넣어 준다.
+    - name: pod-hash
+  metrics:
+    - name: error-rate
+      interval: {{ .Values.analysis.interval }}
+      count: {{ .Values.analysis.count }}
+      successCondition: result[0] <= {{ .Values.analysis.maxErrorRate }}
+      # 0으로 두면 측정 한 번이 튀는 것만으로 롤백한다. 1이면 두 번 연속
+      # 기준을 넘겨야 실패로 본다 — 첫 요청 몇 건이 몰려 비율이 흔들리는 구간을
+      # 넘기면서도, 진짜 결함은 20초 뒤 다음 측정에서 그대로 걸린다.
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: {{ .Values.analysis.prometheusAddress }}
+          # 카나리 파드의 5xx 비율. 라벨 rollouts_pod_template_hash는 PodMonitor가
+          # 파드 라벨에서 옮겨 온 것이다 (templates/podmonitor.yaml).
+          #
+          # or vector(...)로 감싸는 이유: 카나리가 막 떴을 때는 시계열이 아직
+          # 없어 분자·분모가 모두 빈 벡터가 된다. 그대로 두면 result[0]이 없어
+          # 분석이 "오류"로 끝나고, 결함이 아니라 타이밍 때문에 배포가 막힌다.
+          # 트래픽이 없으면 판단 근거가 없다고 보고 통과시킨다(0/1).
+          query: |
+            (
+              sum(rate(adspectrum_http_request_duration_seconds_count{rollouts_pod_template_hash="{{ `{{args.pod-hash}}` }}",status=~"5.."}[1m])) or vector(0)
+            )
+            /
+            (
+              sum(rate(adspectrum_http_request_duration_seconds_count{rollouts_pod_template_hash="{{ `{{args.pod-hash}}` }}"}[1m])) or vector(1)
+            )

@@ -26,6 +26,15 @@ containerPort: 8000
 metrics:
   interval: 15s
 
+# 카나리 단계마다 카나리 파드의 5xx 비율을 Prometheus에 물어본다.
+analysis:
+  prometheusAddress: http://kube-prometheus-stack-prometheus.monitoring:9090
+  # 20초 간격 3회 = 약 1분. 단계당 대기 시간이 곧 이 값이다.
+  interval: 20s
+  count: 3
+  # 5%를 넘으면 그 측정은 실패다.
+  maxErrorRate: 0.05
+
 ingress:
   enabled: true
   # 도메인이 없으므로 ALB 기본 DNS + HTTP로 노출한다 (SPEC 12장).

@@ -9,8 +9,15 @@ spec:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
   podMetricsEndpoints:
-    # Service가 아니라 파드를 직접 긁는다. 6일차에 카나리 파드와 안정 파드가
-    # 동시에 뜨는데, Service 경유로는 둘을 구분할 수 없다.
+    # Service가 아니라 파드를 직접 긁는다. 배포 중에는 카나리 파드와 안정 파드가
+    # 동시에 떠 있는데, Service 경유로는 둘을 구분할 수 없다.
     - port: http
       path: /metrics
       interval: {{ .Values.metrics.interval }}
+      relabelings:
+        # 파드에 붙은 라벨은 지표에 자동으로 따라오지 않는다. 카나리 분석 쿼리가
+        # 안정 파드와 카나리 파드를 갈라 보려면 이 해시가 지표 라벨로 있어야 한다.
+        # 이것이 없으면 두 버전의 요청이 한 시계열로 합쳐져, 카나리만의 에러율을
+        # 물어볼 방법이 사라진다.
+        - sourceLabels: [__meta_kubernetes_pod_label_rollouts_pod_template_hash]
+          targetLabel: rollouts_pod_template_hash

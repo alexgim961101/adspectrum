@@ -1,5 +1,6 @@
-# Deployment가 아니라 Rollout이다. 6일차에 카나리 단계와 분석을 붙일 때
-# 리소스 종류를 갈아엎지 않으려고 처음부터 Rollout으로 만든다.
+# Deployment가 아니라 Rollout이다. 새 버전을 20% → 50% → 100%로 넓히면서
+# 단계마다 카나리 파드의 에러율을 Prometheus에 물어보고, 기준을 넘으면 스스로
+# 이전 버전으로 되돌린다.
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -9,9 +10,38 @@ metadata:
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
-    # 아직 steps가 없다. 이 상태의 canary는 롤링 업데이트와 동일하게 동작한다.
-    # 6일차에 20% → 분석 → 50% → 분석 → 100% 단계와 ALB 가중치 분할을 넣는다.
-    canary: {}
+    canary:
+      # 배포 중에는 Rollouts가 이 두 서비스의 셀렉터를 갈라 놓는다
+      # (templates/service.yaml).
+      canaryService: {{ include "app.name" . }}-canary
+      stableService: {{ include "app.name" . }}-stable
+      trafficRouting:
+        # 레플리카 비율이 아니라 ALB 가중치로 나눈다. 레플리카 2개로는 20%를
+        # 표현할 수 없고, 표현하려고 레플리카를 늘리면 노드 자리를 그만큼 먹는다.
+        alb:
+          ingress: {{ include "app.name" . }}
+          servicePort: {{ .Values.service.port }}
+      steps:
+        - setWeight: 20
+        # 분석 단계는 결과가 나올 때까지 진행을 멈춘다. 실패하면 Rollouts가 스스로
+        # 배포를 중단하고 가중치를 안정 버전 100%로 되돌린다 — 이것이 자동 롤백이다.
+        - analysis:
+            templates:
+              - templateName: {{ include "app.name" . }}-error-rate
+            args:
+              # 방금 뜬 카나리 ReplicaSet의 파드 템플릿 해시. 이 값이 있어야 분석
+              # 쿼리가 안정 파드를 섞지 않고 카나리만 본다.
+              - name: pod-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: {{ include "app.name" . }}-error-rate
+            args:
+              - name: pod-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
   selector:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
