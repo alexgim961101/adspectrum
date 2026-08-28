@@ -1,9 +1,5 @@
 # 실제 값은 deploy/values/event-consumer.yaml이 덮어쓴다.
 
-# 5일차에 KEDA ScaledObject가 이 값을 대신 관리한다. 그때 ArgoCD가 레플리카 수를
-# 되돌리지 않도록 ignoreDifferences를 함께 넣어야 한다.
-replicaCount: 1
-
 image:
   repository: ""
   tag: ""
@@ -22,6 +18,13 @@ env:
 metrics:
   port: 9090
   interval: 15s
+
+# 레플리카 수는 이 값들이 정한다. 상한 5의 근거는 DECISIONS 001(노드 파드 수용량).
+keda:
+  minReplicaCount: 0
+  maxReplicaCount: 5
+  queueLength: 100
+  cooldownPeriod: 120
 
 # 롱 폴링 20초 + 집계 쓰기가 끝날 시간을 준다. 기본값 30초로는 KEDA scale-in이나
 # spot 회수 때 처리 중이던 배치가 잘려 그만큼 중복 재전달된다.

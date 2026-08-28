@@ -1,5 +1,5 @@
 # SQS 큐 길이를 보고 consumer 레플리카를 조절한다.
-# 5일차 ScaledObject가 이 오퍼레이터를 대상으로 동작한다.
+# ScaledObject는 charts/event-consumer/templates/scaledobject.yaml에 있다.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -24,6 +24,16 @@ spec:
             # ScaledObject에서 identityOwner를 operator로 지정해 이 권한을 쓴다.
             annotations:
               eks.amazonaws.com/role-arn: arn:aws:iam::894759291324:role/adspectrum-keda-operator
+
+        # 스케일러가 읽은 큐 길이를 Prometheus로 내보낸다. 대시보드의 핵심 패널이
+        # CloudWatch가 아니라 이 값을 쓴다 — 해상도가 높고, 무엇보다 KEDA가 실제
+        # 스케일 판단에 쓴 값 그대로라 "왜 이때 늘었나"를 그래프로 설명할 수 있다.
+        prometheus:
+          operator:
+            enabled: true
+            podMonitor:
+              enabled: true
+              interval: 15s
 
         resources:
           operator:

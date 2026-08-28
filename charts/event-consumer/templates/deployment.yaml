@@ -5,7 +5,8 @@ metadata:
   labels:
     {{- include "app.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  # replicas를 일부러 두지 않는다. KEDA가 이 값의 유일한 소유자다
+  # (templates/scaledobject.yaml).
   selector:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
