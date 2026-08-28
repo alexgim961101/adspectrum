@@ -103,6 +103,27 @@ Step:    0/4    SetWeight: 0    ActualWeight: 0
 쿼리 가드였습니다. 원인·수정·재검증 과정은 [DECISIONS 013](docs/DECISIONS.md)에
 있습니다. 안전장치는 동작하는 것을 확인하기 전까지 동작한다고 말할 수 없습니다.
 
+### CI가 하는 일
+
+`apps/**` 또는 `charts/**`가 바뀐 push에서만 돌고, 변경된 앱만 골라 검사·빌드합니다.
+
+```
+push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
+                                              │
+                  deploy/values 태그 갱신 커밋 ◀┘
+                             │
+                             └─▶ ArgoCD가 감지해 배포
+```
+
+차트만 바뀐 push는 **18~25초**에 끝납니다. ArgoCD가 차트를 Git에서 직접 받아 가므로
+이미지를 다시 구울 이유가 없고, 대신 실제 values를 얹은 `helm template`으로 렌더링
+오류를 머지 전에 잡습니다. AWS 자격증명은 GitHub OIDC로 받고 신뢰 정책이
+`refs/heads/main`으로 잠겨 있어, PR 실행에서는 역할을 맡는 것 자체가 불가능합니다.
+
+자기 자신을 되부르는 고리는 세 겹으로 막았습니다 — 트리거 경로에 `deploy/**`가 없고,
+갱신 커밋에 `[skip ci]`가 붙고, `GITHUB_TOKEN`으로 만든 푸시는 워크플로를 부르지
+않습니다. 성격이 다른 세 방어선이라 하나를 건드려도 나머지가 남습니다.
+
 ### API 부하 (k6)
 
 | 지표 | 값 |
