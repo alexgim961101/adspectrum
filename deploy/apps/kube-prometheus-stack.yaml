@@ -79,6 +79,9 @@ spec:
             # authType default는 IRSA가 주입한 웹 아이덴티티 토큰을 사용한다.
             - name: CloudWatch
               type: cloudwatch
+              # 대시보드가 이 uid로 데이터소스를 찾는다. 지정하지 않으면 Grafana가
+              # 임의의 uid를 만들어, 코드로 둔 대시보드가 데이터소스를 잃는다.
+              uid: cloudwatch
               jsonData:
                 authType: default
                 defaultRegion: ap-northeast-2

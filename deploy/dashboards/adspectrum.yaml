@@ -1,0 +1,352 @@
+# Grafana 대시보드를 코드로 둔다. 손으로 만든 대시보드는 Grafana 파드가 재시작되면
+# 사라진다(볼륨을 쓰지 않는다 — deploy/apps/kube-prometheus-stack.yaml).
+#
+# kube-prometheus-stack의 사이드카가 grafana_dashboard=1 라벨이 붙은 ConfigMap을
+# 모든 네임스페이스에서 찾아 Grafana에 넣어 준다. 데이터소스는 uid로 참조한다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adspectrum-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  adspectrum.json: |
+    {
+      "uid": "adspectrum",
+      "title": "adspectrum",
+      "tags": [
+        "adspectrum"
+      ],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "editable": true,
+      "refresh": "10s",
+      "time": {
+        "from": "now-30m",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "초당 발행 / 소비 이벤트",
+          "description": "발행선이 소비선보다 높게 유지되면 큐가 쌓이고 있다는 뜻이다.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 0
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(adspectrum_events_published_total[1m]))",
+              "legendFormat": "발행",
+              "editorMode": "code",
+              "range": true
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(adspectrum_events_consumed_total[1m]))",
+              "legendFormat": "소비",
+              "editorMode": "code",
+              "range": true
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "SQS 큐 깊이와 consumer 레플리카 (KEDA)",
+          "description": "큐 깊이는 KEDA 스케일러가 실제로 읽은 값이다. 큐가 쌓이면 레플리카가 따라 오르고, 비면 0으로 내려가는 것이 한 화면에서 보인다.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "큐 깊이"
+                },
+                "properties": [
+                  {
+                    "id": "custom.axisPlacement",
+                    "value": "right"
+                  },
+                  {
+                    "id": "custom.axisLabel",
+                    "value": "메시지 수"
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max(keda_scaler_metrics_value{scaledObject=\"event-consumer\"})",
+              "legendFormat": "큐 깊이",
+              "editorMode": "code",
+              "range": true
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "kube_deployment_spec_replicas{namespace=\"adspectrum\", deployment=\"event-consumer\"}",
+              "legendFormat": "레플리카(목표)",
+              "editorMode": "code",
+              "range": true
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "kube_deployment_status_replicas_available{namespace=\"adspectrum\", deployment=\"event-consumer\"}",
+              "legendFormat": "레플리카(가동)",
+              "editorMode": "code",
+              "range": true
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "metrics-api p95 레이턴시",
+          "description": "히스토그램 버킷에서 계산한 95분위 응답 시간.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 8
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(adspectrum_http_request_duration_seconds_bucket[1m])))",
+              "legendFormat": "p95",
+              "editorMode": "code",
+              "range": true
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "metrics-api 5xx 비율 (버전별)",
+          "description": "카나리 분석이 쓰는 것과 같은 식이다. 빨간 선이 롤백 기준(5%)이고, 계열은 rollouts-pod-template-hash — 즉 배포 중인 버전별로 갈라진다.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 8
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "percentunit",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.05
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (rollouts_pod_template_hash) (rate(adspectrum_http_request_duration_seconds_count{status=~\"5..\"}[1m])) / sum by (rollouts_pod_template_hash) (rate(adspectrum_http_request_duration_seconds_count[1m]))",
+              "legendFormat": "{{rollouts_pod_template_hash}}",
+              "editorMode": "code",
+              "range": true
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "DLQ 메시지 수",
+          "description": "0이 정상이다. 값이 올라오면 3회 재전달에도 처리하지 못한 메시지가 있다는 뜻이다.",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 8
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "cloudwatch",
+                "uid": "cloudwatch"
+              },
+              "queryMode": "Metrics",
+              "metricQueryType": 0,
+              "metricEditorMode": 0,
+              "namespace": "AWS/SQS",
+              "metricName": "ApproximateNumberOfMessagesVisible",
+              "dimensions": {
+                "QueueName": "adspectrum-events-dlq"
+              },
+              "statistic": "Maximum",
+              "period": "60",
+              "region": "default",
+              "matchExact": true
+            }
+          ]
+        }
+      ]
+    }

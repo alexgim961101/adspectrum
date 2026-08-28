@@ -6,9 +6,10 @@ ArgoCD가 되돌린다(`selfHeal`). 유일한 예외는 `bootstrap/`이며, Argo
 
 ```
 deploy/
-├── bootstrap/   ArgoCD 설치 스크립트와 app-of-apps의 뿌리 (1회 수동 실행)
-├── apps/        뿌리가 관리하는 자식 Application. 파일 하나가 컴포넌트 하나
-└── values/      애플리케이션 values. CI가 이미지 태그를 여기에 갱신한다
+├── bootstrap/    ArgoCD 설치 스크립트와 app-of-apps의 뿌리 (1회 수동 실행)
+├── apps/         뿌리가 관리하는 자식 Application. 파일 하나가 컴포넌트 하나
+├── values/       애플리케이션 values. CI가 이미지 태그를 여기에 갱신한다
+└── dashboards/   Grafana 대시보드 정의(ConfigMap). 차트가 아닌 평범한 매니페스트
 ```
 
 ## 동작 방식
@@ -26,6 +27,7 @@ install.sh ──Helm──▶ ArgoCD
 ## 컴포넌트
 
 플랫폼 컴포넌트는 외부 Helm 저장소를, 앱 3종은 이 레포의 `charts/`를 바라본다.
+대시보드만 차트가 아니라 매니페스트 디렉터리를 그대로 가리킨다.
 
 | 파일 | 무엇 | 차트 출처 |
 |---|---|---|
@@ -33,6 +35,7 @@ install.sh ──Helm──▶ ArgoCD
 | `keda.yaml` | 큐 길이 기반 오토스케일링 | 외부 |
 | `argo-rollouts.yaml` | 카나리 배포와 자동 롤백 | 외부 |
 | `kube-prometheus-stack.yaml` | Prometheus, Grafana, kube-state-metrics | 외부 |
+| `grafana-dashboards.yaml` | 대시보드 정의 | `deploy/dashboards` |
 | `ad-event-generator.yaml` | 이벤트 시뮬레이터 | `charts/ad-event-generator` |
 | `event-consumer.yaml` | SQS → DynamoDB 집계 | `charts/event-consumer` |
 | `metrics-api.yaml` | 조회 API (Rollout) | `charts/metrics-api` |
