@@ -188,11 +188,16 @@ aws ecr get-login-password --region ap-northeast-2 \
 
 TAG=$(git rev-parse --short HEAD)
 for app in ad-event-generator event-consumer metrics-api; do
-  docker buildx build --platform linux/amd64 \
+  docker buildx build --platform linux/amd64 --provenance=false \
     -t 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/$app:$TAG \
     --push apps/$app
 done
 ```
+
+**빌드와 푸시를 쪼개지 않는다.** `--load`로 받아 두었다가 나중에 `docker push`로 밀면,
+buildx가 함께 만드는 provenance attestation이 불변 태그를 차지하고 진짜 이미지는 400으로
+거부된다. `describe-images`에는 태그가 보이므로 성공한 것처럼 착각하기 쉽다 (DECISIONS 012).
+`--provenance=false`는 그 매니페스트를 아예 만들지 않는다.
 
 **`--platform linux/amd64`를 빼면 안 된다.** 개발 환경이 Apple Silicon(arm64)이고 노드는
 `t3.medium`(amd64)이라, 기본값으로 빌드하면 파드가 `exec format error`로 죽는다
@@ -323,6 +328,99 @@ gh api repos/<owner>/<repo> --jq '{owner: .owner.id, repo: .id}'
 
 ---
 
+## 4d. 데모 재현 (오토스케일링·카나리)
+
+앱 3종이 Synced/Healthy가 된 뒤에 실행한다. 아래 실측값은 2026-08-28 기준이다.
+
+### 관측 도구 접근
+
+```sh
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
+# http://localhost:3000/d/adspectrum/adspectrum · 사용자 admin
+kubectl get secret -n monitoring kube-prometheus-stack-grafana \
+  -o jsonpath='{.data.admin-password}' | base64 -d; echo
+
+kubectl port-forward -n argocd svc/argocd-server 8080:80
+```
+
+ALB 주소는 Ingress에서 얻는다. 생성 직후 약 100초 동안은 `000`(연결 실패)이 나온다.
+
+```sh
+ALB=$(kubectl get ingress metrics-api -n adspectrum -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+curl -s -o /dev/null -w '%{http_code}\n' "http://$ALB/healthz"
+```
+
+**ArgoCD는 Git을 3분마다 본다.** 데모 중에는 커밋 직후 새로고침을 요청해 기다리는
+시간을 줄인다. 동기화 자체는 여전히 ArgoCD가 한다.
+
+```sh
+kubectl patch application <앱> -n argocd --type merge \
+  -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
+```
+
+### 오토스케일링 (성공 기준 3)
+
+부하는 `kubectl`이 아니라 커밋으로 넣는다. `deploy/values/ad-event-generator.yaml`을
+고치고 push하면 그것이 곧 부하 주입이다.
+
+| 단계 | 값 | 관측된 결과 |
+|---|---|---|
+| 부하 주입 | `EVENTS_PER_SEC: "300"` | 70초 뒤 레플리카 2 → 3 |
+| 부하 증폭 | `replicaCount: 2` (초당 600건) | 40초 뒤 레플리카 5(상한). 큐 150~330 유지 |
+| 부하 중단 | `replicaCount: 0` | 55초 뒤 큐 0, **2분 30초 뒤 레플리카 0** |
+
+컨슈머 파드 하나가 초당 약 200건을 소화한다. 초당 300건은 파드 3개로 감당돼 큐가 쌓이지
+않으므로, 상한까지 올리려면 발행을 600건으로 늘려야 한다.
+
+```sh
+watch -n5 'kubectl get deploy event-consumer -n adspectrum; kubectl get hpa -n adspectrum'
+```
+
+**초당 5건을 계속 흘리면 0까지 내려가지 않는다.** 유입이 있는 한 큐가 완전히 비지 않기
+때문이다. scale-to-zero를 보려면 발행을 멈춰야 한다.
+
+### 카나리 자동 롤백 (성공 기준 4)
+
+분석에는 트래픽이 필요하다. 요청이 없으면 카나리의 5xx 비율을 계산할 표본이 없다.
+
+```sh
+k6 run -e BASE_URL="http://$ALB" -e DURATION=25m loadtest/k6-api.js
+```
+
+`deploy/values/metrics-api.yaml`의 `FAULT_RATE`를 `"0.5"`로 올려 push하면 결함 버전이
+카나리로 나간다. 진행은 플러그인으로 본다.
+
+```sh
+kubectl argo rollouts get rollout metrics-api -n adspectrum --watch
+kubectl get analysisrun -n adspectrum
+```
+
+실측 결과 (초당 30요청 공급 기준):
+
+| 시나리오 | `FAULT_RATE` | 결과 |
+|---|---|---|
+| 결함 주입 | `0.5` | 20% 단계에서 85초 만에 중단, 가중치 자동 복구 (측정값 0.51, 0.48) |
+| 기준선 아래 | `0.02` | 20% → 50% → 100% 승격, 약 3분 30초 (측정값 0.011~0.027) |
+
+복구도 커밋이다. `FAULT_RATE`를 `"0"`으로 되돌려 push하면 Rollout이 Healthy로 돌아온다.
+중단된 Rollout은 사람이 손대지 않아도 안정 버전 100%를 유지한다.
+
+```sh
+kubectl argo rollouts version   # 플러그인이 없으면 설치한다
+```
+
+플러그인은 컨트롤러와 같은 버전을 쓴다(차트 2.41.1 → v1.9.1). Homebrew의 argoproj tap은
+tap 신뢰 설정과 Xcode CLT를 요구하므로, 공식 릴리스 바이너리를 `~/.local/bin`에 두는
+편이 간단하다.
+
+```sh
+curl -sSL -o ~/.local/bin/kubectl-argo-rollouts \
+  https://github.com/argoproj/argo-rollouts/releases/download/v1.9.1/kubectl-argo-rollouts-darwin-arm64
+chmod +x ~/.local/bin/kubectl-argo-rollouts
+```
+
+---
+
 ## 5. 인프라 삭제
 
 작업을 마치면 반드시 내린다. EKS 컨트롤플레인과 NAT Gateway는 사용하지 않아도
@@ -437,6 +535,8 @@ aws ec2 describe-instances --region ap-northeast-2 \
 | 애드온 관련 오류 | EKS 1.36 호환 문제일 수 있다. `locals.tf`의 `kubernetes_version`을 한 단계 낮추고 다시 apply |
 | `EntityAlreadyExists` (OIDC) | 계정에 이미 GitHub OIDC 공급자가 있는데 만들려 한 경우. 2장 참조 |
 | apply가 중간에 멈춤 | 다시 실행한다. state에 남은 것부터 이어서 만든다 |
+| `dial tcp: lookup budgets.amazonaws.com: no such host` | 일시적 DNS 실패다. 리소스 하나만 남으므로 `plan` → `apply`를 다시 돌리면 끝난다 (2026-08-28 실측) |
+| ECR 푸시가 400 Bad Request | 4a의 빌드·푸시를 쪼갠 경우다. attestation이 태그를 차지했다 (DECISIONS 012) |
 | `state lock` 오류 | 다른 터미널에서 Terraform이 실행 중이다. 끝날 때까지 기다린다 |
 | kubectl 접근 거부 | `aws eks update-kubeconfig`를 다시 실행한다. 자격증명이 바뀌면 갱신이 필요하다 |
 
