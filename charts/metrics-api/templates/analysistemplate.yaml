@@ -11,6 +11,7 @@ spec:
     - name: pod-hash
   metrics:
     - name: error-rate
+      initialDelay: {{ .Values.analysis.initialDelay }}
       interval: {{ .Values.analysis.interval }}
       count: {{ .Values.analysis.count }}
       successCondition: result[0] <= {{ .Values.analysis.maxErrorRate }}

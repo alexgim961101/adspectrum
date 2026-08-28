@@ -29,7 +29,11 @@ metrics:
 # 카나리 단계마다 카나리 파드의 5xx 비율을 Prometheus에 물어본다.
 analysis:
   prometheusAddress: http://kube-prometheus-stack-prometheus.monitoring:9090
-  # 20초 간격 3회 = 약 1분. 단계당 대기 시간이 곧 이 값이다.
+  # 카나리 파드가 뜨자마자 물어보면 아직 스크레이프된 지표가 없다. 그 구간을
+  # 건너뛰지 않으면 "데이터 없음"이 "정상"으로 계산되어 결함이 통과한다
+  # (DECISIONS 013). 스크레이프 간격 15s 기준 두 점이 쌓일 시간을 준다.
+  initialDelay: 45s
+  # 20초 간격 3회 = 약 1분. 단계당 대기 시간은 initialDelay + 이 값이다.
   interval: 20s
   count: 3
   # 5%를 넘으면 그 측정은 실패다.
