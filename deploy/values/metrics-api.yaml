@@ -9,4 +9,4 @@ env:
   TABLE_NAME: adspectrum-metrics
   AWS_REGION: ap-northeast-2
   # 6일차 카나리 롤백 데모에서만 0이 아닌 값으로 올린다.
-  FAULT_RATE: "0.02"
+  FAULT_RATE: "0"
