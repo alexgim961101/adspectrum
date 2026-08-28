@@ -215,6 +215,12 @@ adspectrum_http_request_duration_seconds_count{method="GET",path="/campaigns/{ca
 `path` 라벨은 실제 URL이 아니라 **라우트 템플릿**이다. URL을 그대로 쓰면 캠페인 수만큼
 시계열이 생긴다. 매칭되지 않은 요청은 `unmatched` 한 값으로 모은다.
 
+metrics-api의 지표에는 표에 없는 라벨이 하나 더 붙는다. PodMonitor가 파드 라벨
+`rollouts-pod-template-hash`를 지표 라벨 `rollouts_pod_template_hash`로 옮긴다. 카나리
+배포 중에는 안정 버전과 카나리 버전의 파드가 동시에 떠 있는데, 이 라벨이 없으면 두
+버전의 요청이 한 시계열로 합쳐져 카나리만의 에러율을 물어볼 수 없다. 카나리 분석
+쿼리와 대시보드의 5xx 패널이 이 라벨로 계열을 나눈다.
+
 HTTP 지표는 히스토그램 하나뿐이다. `_count`가 요청 수, `status` 라벨이 5xx 비율,
 `_bucket`이 p95를 준다. 별도 Counter를 두면 같은 사실을 두 번 세게 된다.
 
