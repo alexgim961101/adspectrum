@@ -1,0 +1,16 @@
+# IaC 오설정 검사 설정.
+#
+# 외부 모듈(terraform-aws-modules)까지 검사하면 우리가 고칠 수 없는 지적이
+# 쏟아진다. 그 지적들은 고칠 수 없으므로 무시하게 되고, 무시하는 데 익숙해지면
+# 정작 우리 코드의 지적도 함께 흘려보내게 된다. 검사 대상을 우리가 쓴 코드로
+# 좁히는 편이 신호를 살린다.
+misconfiguration:
+  terraform:
+    exclude-downloaded-modules: true
+
+# 무시 목록은 이유와 함께 별도 파일에 둔다.
+ignorefile: .trivyignore.yaml
+
+scan:
+  skip-dirs:
+    - "**/.terraform/**"
