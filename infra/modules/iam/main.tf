@@ -27,6 +27,14 @@ locals {
       policy          = data.aws_iam_policy_document.grafana.json
     }
 
+    # 클러스터 밖 비밀 저장소에서 값을 당겨 와 k8s Secret으로 만든다.
+    # 사람이 부트스트랩에서 주입하던 것을 대신한다 (DECISIONS 017).
+    "external-secrets" = {
+      namespace       = var.external_secrets_namespace
+      service_account = "external-secrets"
+      policy          = data.aws_iam_policy_document.external_secrets.json
+    }
+
     # 유일하게 직접 작성하지 않은 정책이다. 아래 policies/ 파일 주석 참조.
     "aws-load-balancer-controller" = {
       namespace       = var.alb_controller_namespace
@@ -149,3 +157,28 @@ data "aws_iam_policy_document" "grafana" {
     resources = ["*"]
   }
 }
+
+# 이 프로젝트가 쓰는 파라미터만 읽는다. 값은 SecureString이라 복호화 권한이 함께
+# 필요한데, SSM 기본 키(alias/aws/ssm)로 암호화하므로 그 키에 한정한다.
+# 비밀을 직접 만들지 않고 읽기만 하는 이유는 DECISIONS 017에 있다.
+data "aws_iam_policy_document" "external_secrets" {
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter", "ssm:GetParameters"]
+    resources = ["${var.secret_parameter_arn_prefix}/*"]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["ssm.${data.aws_region.current.region}.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_region" "current" {}
