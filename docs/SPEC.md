@@ -112,6 +112,7 @@ adspectrum/
 │   └── values/                  # 환경 values (CI가 이미지 태그를 여기에 갱신)
 ├── infra/
 │   ├── modules/                 # network / eks / data / iam
+│   ├── shared/                  # 환경보다 오래 사는 것 (ECR, CI 푸시 역할) — DECISIONS 020
 │   └── envs/dev/                # 루트 모듈 (단일 환경)
 ├── .github/workflows/           # CI
 ├── loadtest/                    # k6 스크립트

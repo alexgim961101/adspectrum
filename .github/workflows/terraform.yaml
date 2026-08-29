@@ -48,7 +48,7 @@ jobs:
       # 접근하면 자격증명 없이 도는 이 잡의 전제가 깨진다.
       - name: validate
         run: |
-          for dir in infra/envs/dev infra/modules/*/; do
+          for dir in infra/shared infra/envs/dev infra/modules/*/; do
             echo "::group::$dir"
             terraform -chdir="$dir" init -backend=false -input=false >/dev/null
             terraform -chdir="$dir" validate
@@ -82,7 +82,7 @@ jobs:
 
   # 실제로 무엇이 바뀌는지 본다. 읽기 전용 역할을 쓰고 상태에 쓰지 않는다.
   plan:
-    name: plan
+    name: plan (${{ matrix.stack }})
     needs: check
     # 포크에서 온 PR에는 OIDC 토큰이 발급되지 않는다. 조건 없이 두면 매번
     # 실패한 잡이 남아 신호가 무뎌진다.
@@ -92,6 +92,12 @@ jobs:
       id-token: write
       contents: read
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # 수명이 다른 두 스택이다. shared는 환경보다 오래 살고, envs/dev는
+        # 매일 지웠다 만든다 (DECISIONS 020).
+        stack: [shared, envs/dev]
     steps:
       - uses: actions/checkout@v5
 
@@ -109,15 +115,19 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: init
-        run: terraform -chdir=infra/envs/dev init -input=false
+        run: terraform -chdir=infra/${{ matrix.stack }} init -input=false
 
-      # 예산 알림 이메일은 저장소에 없다. plan에만 쓰는 자리표시자를 넣는다.
+      # 예산 알림 이메일은 저장소에 없다. envs/dev의 plan에만 쓰는 자리표시자다.
       - name: plan
         id: plan
         run: |
           set -o pipefail
-          terraform -chdir=infra/envs/dev plan -input=false -no-color -lock-timeout=120s \
-            -var 'budget_notification_email=ci@example.com' | tee plan.txt
+          vars=()
+          if [ "${{ matrix.stack }}" = "envs/dev" ]; then
+            vars=(-var 'budget_notification_email=ci@example.com')
+          fi
+          terraform -chdir=infra/${{ matrix.stack }} plan -input=false -no-color \
+            -lock-timeout=120s "${vars[@]}" | tee plan.txt
 
       - name: PR에 결과 남기기
         if: github.event_name == 'pull_request'
@@ -126,7 +136,7 @@ jobs:
         run: |
           summary=$(grep -E '^(Plan:|No changes\.)' plan.txt | tail -1)
           {
-            echo "### terraform plan"
+            echo "### terraform plan — ${{ matrix.stack }}"
             echo
             echo "\`${summary:-요약 줄을 찾지 못했다}\`"
             echo

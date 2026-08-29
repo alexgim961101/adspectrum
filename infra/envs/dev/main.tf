@@ -13,8 +13,7 @@ module "network" {
 module "data" {
   source = "../../modules/data"
 
-  name      = local.project
-  app_names = local.app_names
+  name = local.project
 }
 
 module "eks" {
@@ -35,13 +34,9 @@ module "iam" {
   oidc_provider_arn = module.eks.oidc_provider_arn
   oidc_provider_url = module.eks.oidc_provider_url
 
-  queue_arn           = module.data.queue_arn
-  table_arn           = module.data.table_arn
-  ecr_repository_arns = module.data.ecr_repository_arns
+  queue_arn = module.data.queue_arn
+  table_arn = module.data.table_arn
 
   secret_parameter_arn_prefix = local.secret_parameter_arn_prefix
 
-  github_repository          = local.github_repository
-  github_repository_owner_id = local.github_repository_owner_id
-  github_repository_id       = local.github_repository_id
 }

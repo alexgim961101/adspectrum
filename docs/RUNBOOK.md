@@ -130,7 +130,15 @@ gh repo deploy-key list --repo alexgim961101/adspectrum
 
 ## 3. 인프라 생성
 
+루트 모듈이 둘이다. `infra/shared`는 계정과 함께 사는 것(ECR, CI 푸시 역할)을 담고
+한 번만 만들면 되며, `infra/envs/dev`가 매일 지웠다 만드는 환경이다 (DECISIONS 020).
+
 ```sh
+# 최초 1회 — 이후 destroy 대상이 아니다
+terraform -chdir=infra/shared init
+terraform -chdir=infra/shared apply
+
+# 매번
 cd infra/envs/dev
 terraform init          # S3 백엔드에 연결하고 잠금 테이블을 확인한다
 terraform plan -out=tfplan
@@ -666,22 +674,22 @@ SSM의 알림 웹훅은 환경보다 오래 살아야 하므로 Terraform이 만
 | GitHub 배포 키 | 남음 | AWS가 아니라 GitHub에 있다. **지우면 다음 부트스트랩이 실패한다** |
 | `~/.ssh/adspectrum-argocd-deploy` | 남음 | 위와 같은 이유로 유지한다 |
 | NAT Gateway | `deleted` 상태로 잠시 표시 | AWS가 삭제 기록을 일정 기간 보여준다. 과금 없음 |
-| VPC · EKS · SQS · DynamoDB · ECR · IAM 역할 · 예산 | 전부 삭제됨 | — |
+| ECR 리포지토리와 CI 푸시 역할 | 남음 | `infra/shared`에 있다. 환경보다 오래 산다 (DECISIONS 020) |
+| VPC · EKS · SQS · DynamoDB · IAM 역할(IRSA) · 예산 | 전부 삭제됨 | — |
 
-### 다시 올릴 때: ECR이 비어 있다
+### 다시 올릴 때: 이미지는 그대로 있다
 
-`force_delete = true`라 destroy가 ECR 리포지토리를 이미지째 지운다. 그래야 destroy가
-수동 개입 없이 끝난다(성공 기준 1). 대신 다시 `apply`하면 리포지토리가 빈 상태로 생기고,
-`deploy/values`에 적힌 태그를 가리키는 이미지가 없어 ArgoCD 동기화가 실패한다.
+한때 destroy가 ECR을 이미지째 지웠고, 다시 올릴 때마다 부트스트랩 전에 이미지를 다시
+구워야 했다. ECR을 `infra/shared`로 옮긴 뒤로는 그 절차가 없다 (DECISIONS 020).
+`deploy/values`에 적힌 태그의 이미지가 살아 있으므로 부트스트랩으로 바로 넘어간다.
 
-부트스트랩 전에 4a의 빌드·푸시를 한 번 돌린다. 태그를 `deploy/values`에 적힌 값과 똑같이
-주면 커밋을 새로 만들 필요가 없다.
+지금 배포에 걸려 있는 태그와 ECR의 이미지가 맞는지만 확인하면 된다.
 
 ```sh
-grep -h '  tag:' deploy/values/*.yaml    # 지금 배포에 걸려 있는 태그 확인
+grep -h '  tag:' deploy/values/*.yaml
+aws ecr describe-images --region ap-northeast-2 \
+  --repository-name adspectrum/metrics-api --query 'imageDetails[].imageTags' --output text
 ```
-
-앱을 고칠 예정이라면 그냥 push해서 CI에 맡기는 편이 빠르다.
 
 ### 삭제 확인
 

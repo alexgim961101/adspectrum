@@ -37,13 +37,3 @@ output "table_arn" {
   description = "집계 테이블 ARN. IRSA 정책의 리소스 범위로 쓴다"
   value       = aws_dynamodb_table.metrics.arn
 }
-
-output "ecr_repository_urls" {
-  description = "앱 이름 → ECR 리포지토리 URL. CI가 푸시 대상으로 쓴다"
-  value       = { for name, repo in aws_ecr_repository.apps : name => repo.repository_url }
-}
-
-output "ecr_repository_arns" {
-  description = "앱 이름 → ECR 리포지토리 ARN. GitHub Actions 역할의 푸시 권한 범위로 쓴다"
-  value       = { for name, repo in aws_ecr_repository.apps : name => repo.arn }
-}

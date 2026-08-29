@@ -3,11 +3,6 @@ variable "name" {
   type        = string
 }
 
-variable "app_names" {
-  description = "ECR 리포지토리를 만들 애플리케이션 이름 목록"
-  type        = list(string)
-}
-
 variable "max_receive_count" {
   description = "이 횟수만큼 수신되고도 삭제되지 않은 메시지를 DLQ로 보낸다"
   type        = number

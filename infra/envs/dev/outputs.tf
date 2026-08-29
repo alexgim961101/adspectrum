@@ -33,11 +33,6 @@ output "table_name" {
   value       = module.data.table_name
 }
 
-output "ecr_repository_urls" {
-  description = "앱 이름 → ECR 리포지토리 URL"
-  value       = module.data.ecr_repository_urls
-}
-
 output "cluster_name" {
   description = "EKS 클러스터 이름"
   value       = module.eks.cluster_name
@@ -56,11 +51,6 @@ output "configure_kubectl" {
 output "irsa_role_arns" {
   description = "ServiceAccount 어노테이션에 넣을 IRSA 역할 ARN"
   value       = module.iam.irsa_role_arns
-}
-
-output "github_actions_role_arn" {
-  description = "CI 워크플로의 role-to-assume 값"
-  value       = module.iam.github_actions_role_arn
 }
 
 output "fis_spot_interruption_template_id" {

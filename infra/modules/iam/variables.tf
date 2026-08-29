@@ -23,11 +23,6 @@ variable "table_arn" {
   type        = string
 }
 
-variable "ecr_repository_arns" {
-  description = "앱 이름 → ECR 리포지토리 ARN. CI 역할의 푸시 대상 범위다"
-  type        = map(string)
-}
-
 variable "app_namespace" {
   description = "애플리케이션 3종이 배포될 네임스페이스"
   type        = string
@@ -56,27 +51,6 @@ variable "grafana_service_account" {
   description = "Grafana ServiceAccount 이름. Helm 릴리스 이름에 따라 달라진다"
   type        = string
   default     = "kube-prometheus-stack-grafana"
-}
-
-variable "github_repository" {
-  description = "CI가 실행될 GitHub 저장소 (owner/repo)"
-  type        = string
-}
-
-variable "github_repository_owner_id" {
-  description = "GitHub 소유자의 숫자 ID. `gh api users/<owner> --jq .id`"
-  type        = string
-}
-
-variable "github_repository_id" {
-  description = "GitHub 저장소의 숫자 ID. `gh api repos/<owner>/<repo> --jq .id`"
-  type        = string
-}
-
-variable "github_branch" {
-  description = "ECR 푸시를 허용할 브랜치. 이 브랜치의 워크플로만 역할을 맡을 수 있다"
-  type        = string
-  default     = "main"
 }
 
 variable "external_secrets_namespace" {

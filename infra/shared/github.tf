@@ -14,11 +14,11 @@ locals {
   #   repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/<branch>
   github_subject = format(
     "repo:%s@%s/%s@%s:ref:refs/heads/%s",
-    split("/", var.github_repository)[0],
-    var.github_repository_owner_id,
-    split("/", var.github_repository)[1],
-    var.github_repository_id,
-    var.github_branch,
+    split("/", local.github_repository)[0],
+    local.github_repository_owner_id,
+    split("/", local.github_repository)[1],
+    local.github_repository_id,
+    local.github_branch,
   )
 }
 
@@ -71,19 +71,19 @@ data "aws_iam_policy_document" "github_ecr" {
       "ecr:BatchGetImage",
       "ecr:DescribeImages",
     ]
-    resources = values(var.ecr_repository_arns)
+    resources = [for r in aws_ecr_repository.apps : r.arn]
   }
 }
 
 resource "aws_iam_role" "github_actions" {
-  name               = "${var.name}-github-actions"
+  name               = "${local.project}-github-actions"
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
 
-  tags = { Name = "${var.name}-github-actions" }
+  tags = { Name = "${local.project}-github-actions" }
 }
 
 resource "aws_iam_role_policy" "github_actions" {
-  name   = "${var.name}-github-actions-ecr"
+  name   = "${local.project}-github-actions-ecr"
   role   = aws_iam_role.github_actions.id
   policy = data.aws_iam_policy_document.github_ecr.json
 }
