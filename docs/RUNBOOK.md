@@ -16,9 +16,9 @@
 | Terraform | 1.5.7 | EKS 모듈 v21이 요구하는 하한 |
 | AWS CLI | 2.x | 자격증명, kubeconfig 갱신 |
 | kubectl | 1.33+ | 클러스터 조작 |
-| Helm | 3.x | 2일차 ArgoCD 부트스트랩 |
-| Docker | 20.x+ | 3일차 이미지 빌드 |
-| uv | 0.5+ | 3일차 Python 앱 |
+| Helm | 3.x | ArgoCD 부트스트랩 |
+| Docker | 20.x+ | 앱 이미지 빌드 |
+| uv | 0.5+ | Python 앱 로컬 검증 |
 
 macOS에서 Homebrew로 설치하면 Terraform은 1.5.7이 받아진다. HashiCorp가 그 다음
 버전부터 라이선스를 BUSL로 바꾸면서 Homebrew가 마지막 오픈소스 버전에 머물러 있기
@@ -117,7 +117,7 @@ VPC·SQS·DynamoDB·ECR·IAM은 3분 안에 끝난다. `Still creating... [10m30
 
 ## 4. 생성 확인
 
-1일차 완료 기준은 노드가 Ready이고 큐·테이블·리포지토리가 생성된 것이다.
+여기까지의 완료 기준은 노드가 Ready이고 큐·테이블·리포지토리가 생성된 것이다.
 
 ```sh
 terraform output
@@ -133,7 +133,7 @@ kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.pods}{"\n"}
 ```
 
 **110이 나와야 한다.** 17이면 VPC CNI의 prefix delegation이 노드에 반영되지 않은 것이고,
-그대로 두면 플랫폼 컴포넌트만으로 파드 자리가 차서 5일차 오토스케일링이 성립하지 않는다
+그대로 두면 플랫폼 컴포넌트만으로 파드 자리가 차서 오토스케일링이 성립하지 않는다
 (DECISIONS 001). 이 경우 애드온 설정을 확인한 뒤 노드그룹을 교체한다.
 
 2026-08-23 첫 실행에서 두 노드 모두 `pods=110`, 할당 가능 메모리 `3372960Ki`(약 3.2GiB)로 확인했다.
@@ -157,8 +157,8 @@ aws ecr describe-repositories --region ap-northeast-2 \
 
 ## 4a. 앱 이미지 빌드와 푸시
 
-ArgoCD가 앱을 동기화하려면 ECR에 이미지가 먼저 있어야 한다. 4일차부터는 CI가 대신하므로
-이 절차는 손으로 배포하거나 CI 없이 재현할 때만 쓴다.
+ArgoCD가 앱을 동기화하려면 ECR에 이미지가 먼저 있어야 한다. 평소에는 CI가 대신하므로,
+이 절차는 클러스터를 새로 만들어 ECR이 빈 상태이거나 CI 없이 재현할 때만 쓴다.
 
 ### 로컬 검증
 
@@ -280,7 +280,7 @@ kubectl describe nodes | grep -A 5 "Allocated resources"
 
 ## 4c. CI (GitHub Actions)
 
-4일차부터는 `apps/**`를 고쳐 main에 push하면 배포까지 자동으로 간다.
+`apps/**`를 고쳐 main에 push하면 배포까지 자동으로 간다.
 4a의 수동 절차는 CI 없이 재현하거나 급히 이미지를 구울 때만 쓴다.
 
 ```
@@ -437,7 +437,7 @@ rm -f tfplan
 
 ### Ingress가 있으면 ALB를 먼저 회수한다
 
-3일차에 metrics-api를 노출한 뒤부터는 destroy가 한 번에 끝나지 않는다. ALB는
+metrics-api를 Ingress로 노출한 뒤부터는 destroy가 한 번에 끝나지 않는다. ALB는
 AWS Load Balancer Controller가 Ingress를 보고 만든 것이라 **Terraform state에 없는데**
 서브넷과 보안 그룹을 점유하고 있어서 VPC 삭제 단계에서 막힌다.
 
@@ -467,7 +467,7 @@ aws elbv2 describe-target-groups --region ap-northeast-2 \
 terraform destroy
 ```
 
-컨트롤러는 ALB와 타깃 그룹, 자기가 만든 보안 그룹까지 스스로 정리한다. 4일차 destroy에서
+컨트롤러는 ALB와 타깃 그룹, 자기가 만든 보안 그룹까지 스스로 정리한다. 이전 destroy에서
 확인했고, 남은 보안 그룹은 전부 Terraform이 만든 EKS 것뿐이었다.
 
 2026-08-28 재확인: Ingress 삭제 후 ALB가 사라지기까지 15초가 걸리지 않았고, 우리 VPC에
