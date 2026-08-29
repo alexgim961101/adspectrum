@@ -25,6 +25,7 @@ concurrency:
 
 env:
   TF_VERSION: "1.9.5"
+  TRIVY_VERSION: "0.74.0"
   AWS_REGION: ap-northeast-2
 
 jobs:
@@ -67,14 +68,17 @@ jobs:
           tflint --recursive --format compact
 
       # IaC 오설정 검사. 이미지 스캔에도 같은 도구를 쓸 수 있어 도구 수를 늘리지 않는다.
+      #
+      # 마켓플레이스 액션 대신 바이너리를 직접 받는다. 로컬에서 돌리는 것과 CI가
+      # 같은 버전을 쓰게 되고, 의존하는 서드파티 액션이 하나 줄어든다.
+      - name: trivy 설치
+        run: |
+          curl -sSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin trivy
+          trivy --version | head -1
+
       - name: trivy config
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: config
-          scan-ref: infra
-          severity: MEDIUM,HIGH,CRITICAL
-          exit-code: "1"
-          trivy-config: .trivy.yaml
+        run: trivy config infra --config .trivy.yaml --severity MEDIUM,HIGH,CRITICAL --exit-code 1
 
   # 실제로 무엇이 바뀌는지 본다. 읽기 전용 역할을 쓰고 상태에 쓰지 않는다.
   plan:
