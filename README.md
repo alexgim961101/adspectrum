@@ -1,5 +1,7 @@
 # adspectrum
 
+[![ci](https://github.com/alexgim961101/adspectrum/actions/workflows/ci.yaml/badge.svg)](https://github.com/alexgim961101/adspectrum/actions/workflows/ci.yaml)
+
 광고 성과 이벤트를 실시간으로 수집·집계하는 이벤트 드리븐 파이프라인을
 AWS EKS 위에 IaC(Terraform)와 GitOps(ArgoCD)로 구축·운영하는 프로젝트.
 
@@ -106,6 +108,8 @@ Step:    0/4    SetWeight: 0    ActualWeight: 0
 ### CI가 하는 일
 
 `apps/**` 또는 `charts/**`가 바뀐 push에서만 돌고, 변경된 앱만 골라 검사·빌드합니다.
+실행 기록은 [Actions 탭](https://github.com/alexgim961101/adspectrum/actions/workflows/ci.yaml)에
+전부 남아 있습니다.
 
 ```
 push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
