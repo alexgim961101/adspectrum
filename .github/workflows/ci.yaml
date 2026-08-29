@@ -32,6 +32,7 @@ env:
   AWS_REGION: ap-northeast-2
   REGISTRY: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com
   UV_VERSION: "0.10.7"
+  TRIVY_VERSION: "0.74.0"
 
 jobs:
   detect:
@@ -143,9 +144,59 @@ jobs:
             --namespace adspectrum \
             --values "deploy/values/${{ matrix.chart }}.yaml" --set image.tag=ci > /dev/null
 
+  # 취약점은 ECR에 올라가기 전에 잡는다. 태그가 불변이라 한번 올라간 이미지는
+  # 지우지 않는 한 그 자리에 남고, 지우는 것은 되돌릴 수 없다.
+  #
+  # PR에서도 도는 이유는 머지 전에 알기 위해서다. AWS를 건드리지 않으므로
+  # 자격증명 없이 실행된다.
+  scan:
+    name: 이미지 취약점 검사 (${{ matrix.app }})
+    needs: detect
+    if: needs.detect.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.detect.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: trivy 설치
+        run: |
+          curl -sSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin trivy
+
+      # 러너 안에서만 쓸 이미지를 만든다. 캐시를 남겨 두어 push 단계가 다시
+      # 굽지 않게 한다.
+      - name: 빌드 (푸시하지 않음)
+        run: |
+          docker buildx build --platform linux/amd64 --provenance=false --load \
+            --cache-to type=gha,mode=max --cache-from type=gha \
+            --tag "adspectrum/${{ matrix.app }}:scan" "apps/${{ matrix.app }}"
+
+      # 고칠 수 있는 것만 막는다. 수정본이 없는 취약점까지 실패로 처리하면
+      # 파이프라인이 상시 빨간불이 되고, 사람은 빨간불을 무시하게 된다.
+      - name: 취약점 검사
+        run: |
+          trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+            --scanners vuln "adspectrum/${{ matrix.app }}:scan"
+
+      # 무엇이 들어 있는지의 목록. 나중에 새 취약점이 공개됐을 때 "우리가 그것을
+      # 쓰고 있었나"를 이미지를 다시 뜯지 않고 답할 수 있다.
+      - name: SBOM 생성
+        run: |
+          trivy image --format cyclonedx \
+            --output "sbom-${{ matrix.app }}.cdx.json" "adspectrum/${{ matrix.app }}:scan"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.app }}
+          path: sbom-${{ matrix.app }}.cdx.json
+          retention-days: 30
+
   publish:
     name: 이미지 푸시 (${{ matrix.app }})
-    needs: [detect, verify]
+    needs: [detect, verify, scan]
     if: github.event_name == 'push' && needs.detect.outputs.apps != '[]'
     runs-on: ubuntu-latest
     permissions:
@@ -188,7 +239,8 @@ jobs:
         # 러너가 x86이라 --platform 없이도 amd64가 나오지만 명시한다. 로컬(arm64)에서
         # 같은 명령을 그대로 쓸 수 있어야 RUNBOOK과 CI가 갈라지지 않는다 (DECISIONS 008).
         run: |
-          docker buildx build --platform linux/amd64 \
+          docker buildx build --platform linux/amd64 --provenance=false \
+            --cache-from type=gha \
             --tag "$REGISTRY/adspectrum/${{ matrix.app }}:${{ needs.detect.outputs.tag }}" \
             --push "apps/${{ matrix.app }}"
 
