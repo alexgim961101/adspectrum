@@ -1,5 +1,7 @@
 # ArgoCD가 charts/ad-event-generator에 이 값을 얹어 배포한다.
 # image.tag는 CI가 갱신한다. 손으로 고치면 다음 CI 실행이 덮어쓴다.
+replicaCount: 3
+
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/ad-event-generator
   tag: "a0e7911"
@@ -11,5 +13,5 @@ env:
   # 부하 시나리오에서는 이 값을 300으로 올리는 커밋이 곧 부하 주입이다.
   # 파드 하나가 초당 300건까지 감당하므로(실측), 그 이상은 replicaCount로 늘린다
   # (docs/RUNBOOK.md 4d).
-  EVENTS_PER_SEC: "5"
+  EVENTS_PER_SEC: "300"
   AWS_REGION: ap-northeast-2
