@@ -1,5 +1,5 @@
 # Deployment 대신 Rollout 리소스로 카나리 배포를 수행한다.
-# 6일차 metrics-api의 단계적 배포와 자동 롤백이 이 컨트롤러의 기능이다.
+# metrics-api의 단계적 배포와 자동 롤백이 이 컨트롤러의 기능이다.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

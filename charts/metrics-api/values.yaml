@@ -14,7 +14,7 @@ serviceAccount:
 env:
   TABLE_NAME: ""
   AWS_REGION: ap-northeast-2
-  # 카나리 자동 롤백 데모(6일차) 전용 장치. 평소에는 0이어야 한다.
+  # 카나리 자동 롤백 데모 전용 장치. 평소에는 0이어야 한다.
   FAULT_RATE: "0"
 
 service:

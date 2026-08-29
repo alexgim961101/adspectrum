@@ -1,4 +1,4 @@
-# image.tag는 CI가 갱신한다 (4일차).
+# image.tag는 CI가 갱신한다.
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/event-consumer
   tag: "6725cb1"

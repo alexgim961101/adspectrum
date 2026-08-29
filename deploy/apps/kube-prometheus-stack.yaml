@@ -26,7 +26,7 @@ spec:
         prometheus:
           prometheusSpec:
             # 기본값은 릴리스 라벨이 붙은 대상만 수집한다. false로 두어야
-            # 3일차에 애플리케이션이 만드는 PodMonitor를 발견한다.
+            # 애플리케이션이 만드는 PodMonitor를 발견한다.
             podMonitorSelectorNilUsesHelmValues: false
             serviceMonitorSelectorNilUsesHelmValues: false
             ruleSelectorNilUsesHelmValues: false

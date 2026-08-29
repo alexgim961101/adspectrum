@@ -1,5 +1,5 @@
 # Ingress 리소스를 보고 실제 ALB를 만들어 주는 컨트롤러.
-# 3일차 metrics-api 노출과 6일차 카나리 트래픽 분할이 모두 이것에 의존한다.
+# metrics-api의 외부 노출과 카나리 가중치 분할이 모두 이것에 의존한다.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
