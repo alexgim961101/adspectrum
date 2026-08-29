@@ -73,9 +73,15 @@ spec:
                   # 채널을 바꾸려면 웹훅을 다시 발급한다.
                   - channel: "#adspectrum-alerts"
                     send_resolved: true
-                    title: '{{ "{{ .CommonLabels.severity | toUpper }}" }} · {{ "{{ .CommonLabels.alertname }}" }}'
-                    text: >-
-                      {{ "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}\n{{ end }}" }}
+                    # Go 템플릿을 그대로 적는다. 이 값은 차트가 tpl로 렌더링하지
+                    # 않으므로 Helm 이스케이프({{ "..." }})를 쓰면 템플릿 문자열
+                    # 자체가 메시지로 나간다. 줄바꿈도 \n이 아니라 실제 개행이어야
+                    # Slack에서 줄이 나뉜다.
+                    title: '{{ .CommonLabels.severity | toUpper }} · {{ .CommonLabels.alertname }}'
+                    text: |-
+                      {{ range .Alerts }}{{ .Annotations.summary }}
+                      {{ .Annotations.description }}
+                      {{ end }}
 
             inhibit_rules:
               # 같은 대상에 critical이 떠 있으면 warning은 묻는다.
