@@ -54,6 +54,21 @@ AWS EKS 위에 IaC(Terraform)와 GitOps(ArgoCD)로 구축·운영하는 프로�
 올려야 확인되고, 확인하기 전까지는 동작한다고 적지 않습니다. 이 원칙 덕분에 카나리
 분석이 조용히 실패한 것을 잡아냈습니다(아래 카나리 절).
 
+![PR에 달린 terraform plan 코멘트](docs/images/ci-terraform-plan-comment.png)
+
+`infra/`를 건드린 PR에는 무엇이 생기고 사라지는지가 코멘트로 붙습니다. 위 PR은 IAM
+역할이 늘어 `74 → 76`이 됐고, 검사 10개를 통과한 뒤 머지됐습니다.
+
+![terraform 워크플로 실행](docs/images/ci-terraform-run.png)
+
+정적 검사가 통과해야 `plan`이 돕니다. 앞 단계는 AWS 자격증명이 없어 포크 PR에서도
+실행되고, 뒤 단계만 읽기 전용 역할을 씁니다.
+
+![Slack에 도착한 알림 목적지 테스트](docs/images/slack-webhook-delivery.png)
+
+알림 목적지는 SSM에 있는 웹훅으로 실제 도달을 확인했습니다. 규칙이 이 경로로 울리는
+것까지는 클러스터를 올려야 확인됩니다.
+
 ### 오토스케일링 (KEDA)
 
 부하는 `kubectl`이 아니라 **커밋**으로 넣습니다. `deploy/values/`의 발행량을 바꿔 push하면
