@@ -1,0 +1,68 @@
+# 노드를 필요할 때 만들고 비면 없앤다. 관리형 노드그룹은 플랫폼 컴포넌트를 얹을
+# 고정 바닥으로 남기고, 워크로드가 몰릴 때 필요한 용량은 Karpenter가 채운다.
+#
+# KEDA가 파드를 늘려도 노드가 고정이면 파드는 Pending에 걸린다. 이 둘이 붙어야
+# "큐가 쌓임 → 파드 증가 → 노드 증가 → 처리 → 양쪽 축소"가 성립한다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # 공식 배포처가 OCI 레지스트리다.
+    repoURL: public.ecr.aws/karpenter
+    chart: karpenter
+    targetRevision: 1.8.1
+    helm:
+      values: |
+        settings:
+          clusterName: adspectrum-eks
+          # spot 회수 2분 전 알림이 이 큐로 온다. Terraform이 만든 이름과 같아야
+          # 하며, 다르면 Karpenter는 조용히 아무 알림도 받지 못한다.
+          interruptionQueue: adspectrum-eks-karpenter
+
+        # 권한은 Pod Identity로 받는다. IRSA와 달리 ServiceAccount에 역할 ARN을
+        # 적지 않는다 — 연결은 클러스터가 관리한다 (DECISIONS 018).
+        serviceAccount:
+          name: karpenter
+
+        controller:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+
+        # 자기가 만든 노드에 자기가 올라가면, 그 노드를 정리할 때 스스로를 내쫓는다.
+        # 관리형 노드그룹 위에서만 돌게 고정한다.
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: karpenter.sh/nodepool
+                      operator: DoesNotExist
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: karpenter
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

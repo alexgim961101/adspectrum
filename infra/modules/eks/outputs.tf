@@ -27,3 +27,18 @@ output "node_security_group_id" {
   description = "노드 보안 그룹. 추가 규칙이 필요할 때 참조한다"
   value       = module.eks.node_security_group_id
 }
+
+output "karpenter_service_account_role_arn" {
+  description = "Karpenter 컨트롤러가 쓰는 IAM 역할 ARN"
+  value       = module.karpenter.iam_role_arn
+}
+
+output "karpenter_node_iam_role_name" {
+  description = "Karpenter가 만든 노드에 붙는 IAM 역할 이름. EC2NodeClass가 참조한다"
+  value       = module.karpenter.node_iam_role_name
+}
+
+output "karpenter_interruption_queue_name" {
+  description = "spot 회수 알림을 받는 SQS 큐 이름"
+  value       = module.karpenter.queue_name
+}
