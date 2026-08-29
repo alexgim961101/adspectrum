@@ -742,3 +742,31 @@ MB 단위라 비용이 사실상 없다). 나머지 셋은 `.trivyignore.yaml`�
 
 외부 모듈(`terraform-aws-modules`)은 검사 대상에서 뺐다. 고칠 수 없는 지적을 계속
 보면 무시하는 데 익숙해지고, 그 습관은 우리 코드의 지적에도 옮는다.
+
+### 검증 결과 (2026-08-29)
+
+이 워크플로를 담은 PR이 스스로의 첫 시험 대상이 됐다. 두 번 실패하고 고쳤다.
+
+**1. `aquasecurity/trivy-action@0.28.0`은 존재하지 않는 태그였다.** 맞는 버전을 찾는
+대신 바이너리를 직접 받는 방식으로 바꿨다. 서드파티 액션 의존이 하나 줄고, 로컬에서
+검증할 때와 CI가 같은 버전을 쓰게 된다.
+
+**2. `ssm:GetParameter` 전면 Deny가 공개 파라미터까지 막았다.**
+
+```
+AccessDeniedException: not authorized to perform: ssm:GetParameter on resource:
+arn:aws:ssm:ap-northeast-2::parameter/aws/service/eks/optimized-ami/1.36/...
+with an explicit deny in an identity-based policy
+```
+
+EKS 모듈이 노드 AMI 버전을 조회하는 경로였다. `/aws/service/...`는 AWS가 모두에게
+제공하는 공개 파라미터라 **ARN에 계정 ID가 없다.** Deny 범위를
+`arn:aws:ssm:*:<계정>:parameter/*`로 좁혀 우리 계정이 소유한 파라미터만 막았다.
+의도했던 것(우리 비밀을 못 읽게 한다)은 그대로 지키면서 공개 조회는 통과한다.
+
+배운 것: 최소 권한을 Deny로 구현하면 "무엇을 막는가"만큼 "무엇까지 막히는가"를
+봐야 한다. 다행히 이런 Deny는 조용히 지나가지 않고 눈에 띄게 깨지지만, 그것도 plan이
+그 리소스를 건드릴 때뿐이다.
+
+**최종 결과**: 정적 검사 통과, plan이 `74 to add, 0 to change, 0 to destroy`를 내고
+PR에 코멘트가 게시됐다. 상태 잠금 획득과 해제도 로그에서 확인했다.
