@@ -106,6 +106,11 @@ module "karpenter" {
   namespace                       = "karpenter"
   service_account                 = "karpenter"
 
+  # 컨트롤러 정책을 관리형이 아니라 인라인으로 만든다. 관리형 정책은 6,144자가
+  # 상한인데 Karpenter가 요구하는 권한 집합이 그것을 넘는다("Cannot exceed quota
+  # for PolicySize: 6144"). 인라인 역할 정책의 상한은 10,240자다.
+  enable_inline_policy = true
+
   # spot 회수 2분 전 알림을 SQS로 받아 미리 파드를 옮긴다. 이 큐가 없으면
   # 노드가 사라지는 것을 회수 시점에야 알게 된다.
   enable_spot_termination = true
