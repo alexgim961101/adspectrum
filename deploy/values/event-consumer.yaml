@@ -1,7 +1,7 @@
 # image.tag는 CI가 갱신한다.
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/event-consumer
-  tag: "6725cb1"
+  tag: "a0e7911"
 serviceAccount:
   name: event-consumer
   roleArn: arn:aws:iam::894759291324:role/adspectrum-event-consumer
