@@ -16,6 +16,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12-slim
 
+# 베이스 이미지가 다시 구워지기를 기다리지 않고 OS 보안 패치를 받는다.
+# CI의 취약점 게이트가 CVE-2026-14456(openssl, HIGH)을 잡아 추가했다 — 수정본이
+# 데비안 저장소에 있는데 베이스에는 아직 반영되지 않은 상태였다 (DECISIONS 019).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # non-root 실행. Helm 차트의 runAsUser와 같은 UID를 쓴다.
 RUN useradd --create-home --uid 10001 app
 WORKDIR /app
