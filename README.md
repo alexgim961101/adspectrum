@@ -13,24 +13,11 @@ AWS EKS 위에 IaC(Terraform)와 GitOps(ArgoCD)로 구축·운영하는 프로�
 
 ## 아키텍처
 
-```mermaid
-flowchart LR
-    subgraph EKS["EKS · 프라이빗 서브넷 · spot 노드 2대"]
-        GEN[ad-event-generator<br/>이벤트 시뮬레이터]
-        CON[event-consumer<br/>KEDA 0→5 스케일]
-        API[metrics-api<br/>Argo Rollouts 카나리]
-        OBS[Prometheus + Grafana]
-        CD[ArgoCD · KEDA · Rollouts]
-    end
-    GEN -->|SendMessageBatch| SQS[(SQS<br/>+ DLQ)]
-    SQS -->|long poll| CON
-    CON -->|UpdateItem ADD| DDB[(DynamoDB<br/>분 단위 집계)]
-    DDB --> API
-    ALB[ALB Ingress] -->|가중치 분할| API
-    SQS -.큐 길이.-> CD
-    GH[GitHub 모노레포] -->|CI: 빌드 + 태그 갱신| GH
-    GH -->|deploy/ 감시| CD
-```
+![데이터 평면](docs/images/architecture-data-plane.svg)
+
+컨슈머는 **성공한 메시지만 삭제합니다.** 실패한 메시지는 그대로 두어 SQS가 재전달하고,
+3회를 넘기면 점선 경로를 따라 DLQ로 빠집니다. 배포 흐름과 자동 제어 루프는
+[설계 스펙 3장](docs/SPEC.md)에 따로 그려 두었습니다.
 
 이벤트는 초당 N건 생성되어 SQS로 배치 발행되고, 컨슈머가 롱 폴링으로 받아 캠페인·분
 단위로 사전 집계한 뒤 DynamoDB에 원자적 카운터로 반영합니다. 조회 API는 분 버킷을

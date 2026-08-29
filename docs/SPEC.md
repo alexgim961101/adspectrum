@@ -40,24 +40,24 @@
 
 ## 3. 아키텍처
 
-```mermaid
-flowchart LR
-    subgraph EKS["EKS (프라이빗 서브넷, spot 노드)"]
-        GEN[ad-event-generator<br/>이벤트 시뮬레이터]
-        CON[event-consumer<br/>KEDA 0→N 스케일]
-        API[metrics-api<br/>Argo Rollouts 카나리]
-        OBS[Prometheus + Grafana]
-        CD[ArgoCD + KEDA + Rollouts]
-    end
-    GEN -->|batch send| SQS[(SQS<br/>+ DLQ)]
-    SQS -->|long poll| CON
-    CON -->|atomic ADD| DDB[(DynamoDB<br/>분 단위 집계)]
-    DDB --> API
-    ALB[ALB Ingress] --> API
-    SQS -.큐 길이.-> CD
-    GH[GitHub 모노레포] -->|CI: 이미지 빌드+태그 갱신| GH
-    GH -->|deploy/ 경로 동기화| CD
-```
+세 가지를 나눠 그린다. 이벤트가 흐르는 경로, 커밋이 클러스터에 반영되는 경로, 그리고
+그 위에서 스스로 도는 제어 루프다. 한 장에 겹쳐 그리면 어느 화살표가 데이터이고 어느
+화살표가 명령인지 구분되지 않는다.
+
+![데이터 평면](images/architecture-data-plane.svg)
+
+컨슈머는 **성공한 메시지만 삭제한다.** 실패한 메시지는 그대로 두어 SQS가 재전달하고,
+3회를 넘기면 점선을 따라 DLQ로 빠진다.
+
+![배포 평면](images/architecture-delivery.svg)
+
+점선이 CI가 자기 저장소로 되미는 커밋이다. 이 고리가 자기 자신을 다시 부르지 않도록
+막는 장치는 4장에 있다.
+
+![자동 제어](images/architecture-control.svg)
+
+두 레인 모두 아래쪽이 닫힌 고리다. 관측한 값이 다음 행동을 정하고, 그 행동이 다시
+관측값을 바꾼다. 카나리 쪽은 트래픽이 없으면 표본이 없어 아무것도 판단하지 못한다.
 
 ### 데이터 흐름
 

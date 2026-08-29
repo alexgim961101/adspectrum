@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" width="900" height="420"
+     role="img" aria-label="데이터 평면: generator가 SQS로 발행하고 consumer가 DynamoDB에 집계하며 metrics-api가 조회한다" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="900" height="420" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="28" y="40" font-size="14" fill="#0f172a" font-weight="700">데이터 평면</text>
+  <text x="28" y="60" font-size="11.5" fill="#475569">이벤트가 발행되어 집계되고 조회되기까지</text>
+  <rect x="650" y="20" width="200" height="38" rx="19" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+  <text x="750.0" y="44" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">조회 클라이언트</text>
+  <rect x="650" y="82" width="200" height="44" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+  <text x="750.0" y="101" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">ALB</text>
+  <text x="750.0" y="117" text-anchor="middle" font-size="11" fill="#0f172a">퍼블릭 서브넷</text>
+  <rect x="30" y="166" width="840" height="120" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="46" y="188" font-size="12" fill="#475569" font-weight="600">EKS · 프라이빗 서브넷 · spot 노드</text>
+  <rect x="60" y="202" width="190" height="56" rx="8" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+  <text x="155.0" y="227" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">ad-event-generator</text>
+  <text x="155.0" y="243" text-anchor="middle" font-size="11" fill="#0f172a">이벤트 시뮬레이터</text>
+  <rect x="360" y="202" width="190" height="56" rx="8" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+  <text x="455.0" y="227" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">event-consumer</text>
+  <text x="455.0" y="243" text-anchor="middle" font-size="11" fill="#0f172a">배치 내 사전 집계</text>
+  <rect x="655" y="202" width="190" height="56" rx="8" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+  <text x="750.0" y="227" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">metrics-api</text>
+  <text x="750.0" y="243" text-anchor="middle" font-size="11" fill="#0f172a">기간 성과 조회</text>
+  <rect x="155" y="336" width="170" height="58" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+  <text x="240.0" y="362" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">SQS</text>
+  <text x="240.0" y="378" text-anchor="middle" font-size="11" fill="#0f172a">메인 큐</text>
+  <rect x="430" y="336" width="120" height="58" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+  <text x="490.0" y="370" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">DLQ</text>
+  <rect x="640" y="336" width="200" height="58" rx="8" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+  <text x="740.0" y="362" text-anchor="middle" font-size="13" fill="#0f172a" font-weight="600">DynamoDB</text>
+  <text x="740.0" y="378" text-anchor="middle" font-size="11" fill="#0f172a">캠페인 × 분 버킷</text>
+  <polyline points="750,58 750,82" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+  <polyline points="750,126 750,202" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="738" y="150" text-anchor="end" font-size="11" fill="#475569">GET /campaigns/…/metrics</text>
+  <polyline points="155,258 155,322 215,322 215,336" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="163" y="315" text-anchor="start" font-size="11" fill="#475569">SendMessageBatch 10건</text>
+  <polyline points="295,336 295,308 455,308 455,258" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="303" y="301" text-anchor="start" font-size="11" fill="#475569">long poll 20초 · 배치 10건</text>
+  <polyline points="505,258 505,316 700,316 700,336" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="513" y="309" text-anchor="start" font-size="11" fill="#475569">UpdateItem ADD</text>
+  <polyline points="790,258 790,336" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="782" y="301" text-anchor="end" font-size="11" fill="#475569">버킷 Query 후 합산</text>
+  <polyline points="325,365 430,365" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ad)"/>
+  <text x="377" y="357" text-anchor="middle" font-size="11" fill="#475569">수신 3회 초과</text>
+</svg>
