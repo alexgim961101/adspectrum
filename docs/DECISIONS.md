@@ -841,12 +841,43 @@ Git에 넣으면 저장소를 읽을 수 있는 사람이 곧 알림 채널에 �
 사라졌다. 이 절의 판단(목적지 없는 알림 시스템을 허용하지 않는다)은 그대로다 —
 파라미터가 비어 있으면 `ExternalSecret`이 오류로 남아 눈에 띈다.
 
-### 남은 것
+### 검증 결과 (2026-08-29)
 
-규칙이 실제로 발화하고 Slack에 도착하는지는 클러스터를 올려야 확인된다. 검증 시나리오는
-이미 있다 — DECISIONS 009에서 쓴 스키마 위반 메시지 주입이 그대로
-`ConsumerInvalidMessages`를 띄우고, 카나리 롤백 데모의 `FAULT_RATE=0.5`가
-`MetricsApiErrorBudgetBurningFast`를 띄운다. `[미검증]`
+스키마 위반 메시지 한 건을 큐에 넣고 확인했다.
+
+```
+$ aws sqs send-message --message-body '{"broken":"schema"}'
+→ ConsumerInvalidMessages  warning  active   (약 2분 뒤)
+```
+
+Alertmanager 지표로 전송까지 확인했다. `alertmanager_notifications_total{integration="slack"}`
+가 6이고 `notifications_failed_total`은 모든 사유에서 0이었다. 라우팅도 의도대로 갈렸다 —
+`Watchdog` 1건은 null 수신자로, 나머지 4건은 slack으로 갔다.
+
+기본 규칙 중 `KubeCPUOvercommit`·`KubeMemoryOvercommit`도 함께 발화했다. 노드 2대에
+컨슈머 10개와 발행기 3개를 얹은 상태였으니 사실이다 — 끄지 않은 기본 규칙이 실제로
+쓸모 있는 신호를 준 경우다.
+
+### 겪은 것 — 도착했는데 읽을 수 없었다
+
+전송은 성공했지만 Slack에 찍힌 것은 이랬다.
+
+```
+{{ .CommonLabels.severity | toUpper }} · {{ .CommonLabels.alertname }}
+{{ range .Alerts }}{{ .Annotations.summary }}
+```
+
+값이 아니라 템플릿 문자열 자체가 나갔다. 원인은 내가 씌운 Helm 이스케이프였다.
+차트가 `alertmanager.config`를 `tpl`로 렌더링할 것이라 가정하고 `{{ "{{ ... }}" }}`로
+감쌌는데, kube-prometheus-stack은 그 값을 렌더링하지 않는다. 그래서 이스케이프가 그대로
+남았고, Alertmanager의 Go 템플릿이 "따옴표 안의 문자열을 출력하라"는 지시로 읽었다.
+
+이스케이프를 걷어내고 Go 템플릿을 그대로 적어 고쳤다. 본문 줄바꿈도 `\n` 두 글자가
+아니라 실제 개행이어야 해서 블록 스칼라로 바꿨다.
+
+**전송 성공이 도착 성공은 아니다.** `notifications_total`이 늘고 `failed_total`이 0이어도
+사람이 읽을 수 없는 메시지였다. 지표만 보고 "동작한다"고 적었다면 그대로 넘어갔을 것이다.
+실제로 채널을 열어 본 뒤에야 알았다.
 
 ## 017. 비밀을 클러스터 밖에 두고 당겨 온다
 
@@ -922,9 +953,21 @@ ExternalSecret은 차트가 설치하는 CRD가 있어야 하고, 대상 네임�
 파라미터가 비어 있으면 `ExternalSecret`이 오류 상태로 남고 Alertmanager 파드는
 시크릿을 기다린다. 값을 넣는 순간 스스로 회복하므로 순서를 지킬 필요는 없다.
 
-### 남은 것
+### 검증 결과 (2026-08-29)
 
-실제 동기화와 알림 전송은 클러스터를 올려야 확인된다. `[미검증]`
+클러스터를 새로 세운 뒤 사람이 아무것도 하지 않았는데 시크릿이 만들어졌다.
+
+```
+$ kubectl get externalsecret -n monitoring
+NAME                 STORE     STATUS         READY   LAST SYNC
+alertmanager-slack   aws-ssm   SecretSynced   True    5m59s
+```
+
+만들어진 Secret의 `webhook-url` 값은 81자로 SSM에 넣은 것과 길이가 같고, 소유자는
+`ExternalSecret/alertmanager-slack`이다(`creationPolicy: Owner`). Alertmanager 파드는
+그것을 마운트해 `2/2 Running`으로 떴고, 실제로 Slack에 알림을 보냈다(016 검증 결과).
+
+부트스트랩에서 사람이 넣은 것은 배포 키 하나뿐이었다.
 
 ## 018. 파드 아래 계층도 자동으로 늘린다
 
@@ -989,7 +1032,53 @@ AWS FIS 실험 템플릿을 만들어 회수를 직접 일으킨다. 확인하�
 
 2분 예고를 그대로 쓴다. 더 짧게 주면 대응 과정을 관찰할 시간이 없다.
 
-### 남은 것
+### 검증 결과 (2026-08-29)
 
-노드가 실제로 늘고 줄어드는지, 회수 실험에서 무엇이 일어나는지는 클러스터를 올려야
-확인된다. `[미검증]`
+**먼저 배운 것: 이 워크로드는 노드를 늘릴 만큼 무겁지 않다.** 부하를 초당 900건까지
+올려 컨슈머가 상한 10까지 늘어났지만 파드는 하나도 Pending이 되지 않았다. 요청이
+50m이라 10개가 기존 노드 2대에 다 들어간다. KEDA 상한을 5로 묶었던 옛 제약은 파드
+수용량이었고(DECISIONS 001), prefix delegation으로 그것이 풀린 뒤로는 CPU도 여유가 있다.
+
+그래서 Karpenter는 표준 방식으로 확인했다 — 들어갈 수 없는 파드를 만들어 본다.
+
+| 확인 | 결과 |
+|---|---|
+| 노드 생성 | 1 vCPU 파드 3개 배포 → **33초 만에** `c5a.xlarge` spot 노드 생성, 전부 Running |
+| 인스턴스 선택 | 후보(t/m/c · 2~4 vCPU) 중에서 골랐다. 회수 뒤 교체분은 `t3.xlarge`였다 |
+| 축소 | 파드 제거 후 3분 40초 뒤 `"reason":"underutilized","decision":"delete"`로 노드 삭제 |
+
+**spot 회수 실험.** FIS로 회수를 일으키고 1분 안에 복구되는 것을 봤다.
+
+```
+23:04:32  실험 시작
+23:05:05  노드에 karpenter.sh/disrupted 테인트, 파드 3개 전부 축출
+23:05:38  새 노드에서 3개 전부 Running
+```
+
+Karpenter 로그가 경로를 그대로 보여 준다.
+
+```
+"initiating delete from interruption message"
+  queue: "adspectrum-eks-karpenter"  messageKind: "spot_interrupted"
+  action: "CordonAndDrain"
+```
+
+이전 인스턴스(`i-0627…`)는 `terminated`, 새 인스턴스는 `i-03e2…`로 바뀌었다. 그동안
+파이프라인의 DLQ는 1건이었는데 그것은 알림 시험용으로 직접 넣은 스키마 위반 메시지이고,
+회수로 생긴 유실은 없었다.
+
+### 겪은 것 — 관리형 정책 크기 상한
+
+첫 apply에서 컨트롤러 IAM 정책 생성이 실패했다.
+
+```
+Error: creating IAM Policy: LimitExceeded: Cannot exceed quota for PolicySize: 6144
+```
+
+Karpenter가 요구하는 권한 집합이 관리형 정책의 6,144자를 넘는다. 모듈이 이 상황을
+예상하고 `enable_inline_policy` 옵션을 두었고(설명에 같은 오류 문구가 적혀 있다),
+인라인 역할 정책의 상한은 10,240자다. 그 옵션을 켜서 해결했다.
+
+부트스트랩 초기에 Karpenter가 `"failed listing instance types: no subnets found"`를
+몇 번 남기는데, EC2NodeClass가 아직 동기화되기 전이라 그렇다. 뒤 물결에서 CR이
+적용되면 사라진다.
