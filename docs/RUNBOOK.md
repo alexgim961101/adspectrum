@@ -65,6 +65,46 @@ aws iam create-open-id-connect-provider \
   --client-id-list sts.amazonaws.com
 ```
 
+### 상태 백엔드와 CI 역할 (최초 1회)
+
+Terraform 상태는 S3에 있고 DynamoDB로 잠근다. **이 셋은 Terraform이 만들지 않는다.**
+자기 상태를 담은 저장소를 자기 상태로 관리하면 `destroy`가 자기 발밑을 지우고, CI의
+plan 역할이 환경 안에 있으면 환경이 내려간 순간 plan도 못 돌린다 (DECISIONS 015).
+
+```sh
+ACC=894759291324; R=ap-northeast-2
+B=adspectrum-tfstate-$ACC; T=adspectrum-tfstate-lock
+
+aws s3api create-bucket --bucket "$B" --region "$R" \
+  --create-bucket-configuration LocationConstraint="$R"
+aws s3api put-public-access-block --bucket "$B" --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api put-bucket-versioning --bucket "$B" --versioning-configuration Status=Enabled
+aws s3api put-bucket-encryption --bucket "$B" --server-side-encryption-configuration \
+  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}'
+aws s3api put-bucket-lifecycle-configuration --bucket "$B" --lifecycle-configuration \
+  '{"Rules":[{"ID":"expire-noncurrent","Status":"Enabled","Filter":{},"NoncurrentVersionExpiration":{"NoncurrentDays":90}}]}'
+
+aws dynamodb create-table --table-name "$T" --region "$R" \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH --billing-mode PAY_PER_REQUEST
+```
+
+버전 관리를 켜는 이유는 상태를 실수로 덮어썼을 때 되돌릴 수 있어야 하기 때문이고,
+수명주기 규칙은 그 이전 버전들이 무한히 쌓이지 않게 한다.
+
+CI의 plan 역할은 읽기 전용이다. 신뢰 정책은 이 저장소의 `main` push와 PR 두 subject만
+허용하고, 권한은 `ReadOnlyAccess`에 명시적 Deny를 얹어 상태 버킷 밖의 S3 객체와
+비밀 값 조회를 막는다. 정책 문서는 DECISIONS 015에 근거와 함께 정리되어 있다.
+
+```sh
+aws iam get-role --role-name adspectrum-ci-plan --query 'Role.Arn' --output text
+```
+
+**zsh에서 정책 JSON을 작성할 때 주의한다.** `"arn:aws:dynamodb:$R:$ACC:table/$T"`처럼
+쓰면 zsh가 `$ACC:t`를 변수 수식자(basename)로 해석해 ARN이 조용히 깨진다. 중괄호로
+`${ACC}`처럼 감싸거나 파일을 스크립트로 생성한다. 실제로 겪었다.
+
 ### ArgoCD 배포 키 (최초 1회)
 
 저장소가 비공개라 ArgoCD가 clone하려면 자격이 필요하다. 개인 SSH 키 대신 이 저장소에만
@@ -92,7 +132,7 @@ gh repo deploy-key list --repo alexgim961101/adspectrum
 
 ```sh
 cd infra/envs/dev
-terraform init
+terraform init          # S3 백엔드에 연결하고 잠금 테이블을 확인한다
 terraform plan -out=tfplan
 terraform apply tfplan
 ```

@@ -63,6 +63,13 @@ resource "aws_dynamodb_table" "metrics" {
     type = "S"
   }
 
+  # 집계 테이블은 이벤트를 다시 흘려보내면 복구할 수 있지만, SQS 보존 기간이
+  # 지난 구간은 되살릴 수 없다. 온디맨드 테이블에서 이 기능의 비용은 저장량에
+  # 비례하고 이 프로젝트의 저장량은 MB 단위다.
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = { Name = "${var.name}-metrics" }
 }
 
