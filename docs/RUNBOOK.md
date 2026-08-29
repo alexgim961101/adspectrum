@@ -278,6 +278,63 @@ deploy/bootstrap/install.sh
 스크립트는 실행 전에 kubectl 컨텍스트가 대상 클러스터를 가리키는지 확인한다.
 다른 클러스터에 설치하는 사고를 막기 위한 것이며, 어긋나면 전환 명령과 함께 중단한다.
 
+### 알림 목적지
+
+Alertmanager가 알림을 보낼 곳이다. 웹훅 URL은 **SSM 파라미터 스토어**에 두고
+External Secrets Operator가 클러스터로 당겨 온다. 사람이 클러스터에 직접 넣지
+않으므로, 클러스터를 몇 번을 다시 만들어도 이 값은 그대로 남는다 (DECISIONS 017).
+
+발급 절차 (최초 1회):
+
+1. <https://api.slack.com/apps> → **Create New App** → **From scratch**
+2. 이름을 정하고 알림을 받을 워크스페이스를 고른다
+3. **Features → Incoming Webhooks**를 켠다
+4. **Add New Webhook to Workspace** → 채널 선택 → **Allow**
+5. 표시된 `https://hooks.slack.com/services/...`를 복사한다
+
+채널은 이 시점에 고정된다. 나중에 바꾸려면 웹훅을 다시 발급한다.
+
+**URL을 화면에 남기지 않고 저장한다.** 명령 이력이나 로그에 남으면 그 자체로 유출이다.
+
+```sh
+printf '웹훅 URL: '
+stty -echo; IFS= read -r W; stty echo; printf '\n'
+aws ssm put-parameter --region ap-northeast-2 \
+  --name /adspectrum/alertmanager/slack-webhook \
+  --type SecureString --value "$W" --overwrite >/dev/null
+unset W
+```
+
+`stty -echo`로 입력을 숨긴다. `read -p`로 프롬프트를 주는 방식은 bash 전용이라
+zsh에서는 `read: -p: no coprocess`로 실패한다 — zsh에서 `-p`는 코프로세스에서
+읽으라는 다른 뜻이다. 위 형태는 두 셸에서 모두 동작한다.
+
+목적지가 살아 있는지는 클러스터 없이도 확인할 수 있다. URL을 출력하지 않고 응답 코드만 본다.
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"adspectrum 연결 확인"}' \
+  "$(aws ssm get-parameter --region ap-northeast-2 \
+      --name /adspectrum/alertmanager/slack-webhook --with-decryption \
+      --query 'Parameter.Value' --output text)"
+```
+
+`200`이면 채널에 메시지가 도착한다. `403`이나 `404`면 웹훅이 폐기됐거나 URL이 잘못됐다.
+
+**파라미터는 `terraform destroy`로 지워지지 않는다.** Terraform이 만들지 않기
+때문이며, 그래야 클러스터를 다시 세울 때 사람이 다시 입력하지 않는다. 목적지를
+바꾸려면 위 `put-parameter`를 다시 실행하면 되고, 클러스터는 `refreshInterval`
+(1시간) 안에 새 값을 가져간다. 즉시 반영하려면 다음을 실행한다.
+
+```sh
+kubectl annotate externalsecret alertmanager-slack -n monitoring \
+  force-sync=$(date +%s) --overwrite
+```
+
+파라미터가 없으면 `ExternalSecret`이 오류 상태로 남고 Alertmanager 파드는 시크릿을
+기다린다. 값을 넣는 순간 스스로 회복하므로 순서를 지킬 필요는 없다.
+
 ### 동기화 확인
 
 ```sh

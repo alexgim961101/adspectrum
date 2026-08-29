@@ -2,6 +2,8 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
   region       = "ap-northeast-2"
   project      = "adspectrum"
@@ -26,6 +28,11 @@ locals {
   # 컨테이너 이미지를 빌드해 배포하는 애플리케이션. ECR 리포지토리와
   # IRSA 역할이 이 목록을 기준으로 만들어진다.
   app_names = ["ad-event-generator", "event-consumer", "metrics-api"]
+
+  # 클러스터 밖에 두는 비밀의 위치. 파라미터 자체는 Terraform이 만들지 않는다 —
+  # destroy와 함께 지워지면 클러스터를 다시 세울 때마다 사람이 값을 넣어야 한다
+  # (DECISIONS 017). 여기서는 읽을 대상의 범위만 정한다.
+  secret_parameter_arn_prefix = "arn:aws:ssm:${local.region}:${data.aws_caller_identity.current.account_id}:parameter/${local.project}"
 
   # CI 역할의 신뢰 정책 대상. 이 저장소의 main 브랜치 워크플로만 ECR에 푸시할 수 있다.
   # OIDC subject에는 이름이 아니라 숫자 ID가 실린다. 값 확인:

@@ -78,3 +78,14 @@ variable "github_branch" {
   type        = string
   default     = "main"
 }
+
+variable "external_secrets_namespace" {
+  description = "External Secrets Operator가 설치되는 네임스페이스"
+  type        = string
+  default     = "external-secrets"
+}
+
+variable "secret_parameter_arn_prefix" {
+  description = "ESO가 읽을 SSM 파라미터 ARN 접두사"
+  type        = string
+}
