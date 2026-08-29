@@ -237,6 +237,15 @@ for app in ad-event-generator event-consumer metrics-api; do
 done
 ```
 
+**이 수동 절차는 취약점 게이트를 거치지 않는다.** CI로 올리면 `trivy image`가 고칠 수
+있는 HIGH·CRITICAL을 푸시 전에 막지만(DECISIONS 019), 손으로 굽는 경로에는 그 검사가
+없다. 급할 때만 쓰고, 평소에는 push해서 CI에 맡긴다. 직접 확인하려면 아래를 돌린다.
+
+```sh
+trivy image --severity HIGH,CRITICAL --ignore-unfixed --scanners vuln \
+  894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/<앱>:<태그>
+```
+
 **빌드와 푸시를 쪼개지 않는다.** `--load`로 받아 두었다가 나중에 `docker push`로 밀면,
 buildx가 함께 만드는 provenance attestation이 불변 태그를 차지하고 진짜 이미지는 400으로
 거부된다. `describe-images`에는 태그가 보이므로 성공한 것처럼 착각하기 쉽다 (DECISIONS 012).

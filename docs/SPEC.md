@@ -268,6 +268,10 @@ PR 워크플로는 lint+test만 수행한다.
 
 다음은 의도적으로 제외하며, README의 "확장 로드맵" 섹션에 이유와 함께 기록한다.
 
+> 이 목록은 계획 시점의 판단이다. 완료 정의를 채운 뒤 일부를 다시 열었다 — Karpenter는
+> DECISIONS 018에서, 비밀 관리(External Secrets)는 017에서 도입했다. 무엇이 바뀌었고
+> 왜 바꿨는지는 그쪽에 있다.
+
 - HashiCorp Vault / Boundary (관심 스택이지만 1주 범위 초과 — 로드맵에서 External Secrets + Vault 구상 언급)
 - Tempo 분산 트레이싱, Datadog/Sentry
 - Kafka/Kinesis (SQS 선택 근거: 관리 부담 최소화 + KEDA 연동 단순성. 수조 단위 스케일에서는 Kinesis/Kafka가 적합함을 로드맵에 언급)
