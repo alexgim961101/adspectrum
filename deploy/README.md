@@ -10,7 +10,8 @@ deploy/
 ├── apps/         뿌리가 관리하는 자식 Application. 파일 하나가 컴포넌트 하나
 ├── values/       애플리케이션 values. CI가 이미지 태그를 여기에 갱신한다
 ├── dashboards/   Grafana 대시보드 정의(ConfigMap). 차트가 아닌 평범한 매니페스트
-└── secrets/      비밀을 어디서 가져올지(ClusterSecretStore)와 무엇을 가져올지(ExternalSecret)
+├── secrets/      비밀을 어디서 가져올지(ClusterSecretStore)와 무엇을 가져올지(ExternalSecret)
+└── karpenter/    어떤 노드를 언제 만들고 없앨지(NodePool, EC2NodeClass)
 ```
 
 ## 동작 방식
@@ -39,6 +40,8 @@ install.sh ──Helm──▶ ArgoCD
 | `grafana-dashboards.yaml` | 대시보드 정의 | `deploy/dashboards` |
 | `external-secrets.yaml` | SSM의 비밀을 k8s Secret으로 동기화 | 외부 |
 | `external-secrets-config.yaml` | 비밀 저장소와 동기화 대상 정의 | `deploy/secrets` |
+| `karpenter.yaml` | 노드 오토스케일링 | 외부(OCI) |
+| `karpenter-config.yaml` | 노드 조건과 정리 정책 | `deploy/karpenter` |
 | `ad-event-generator.yaml` | 이벤트 시뮬레이터 | `charts/ad-event-generator` |
 | `event-consumer.yaml` | SQS → DynamoDB 집계 | `charts/event-consumer` |
 | `metrics-api.yaml` | 조회 API (Rollout) | `charts/metrics-api` |
@@ -70,9 +73,9 @@ GitOps는 Git에 있는 것이 곧 클러스터 상태여야 하므로 값을 �
 ## 동기화 순서
 
 대부분의 Application은 순서를 따지지 않고 실패하면 재시도로 회복한다. 예외가 하나
-있다. `external-secrets-config`는 `argocd.argoproj.io/sync-wave: "1"`을 달아 뒤에
-동기화한다 — ClusterSecretStore와 ExternalSecret은 external-secrets 차트가 설치하는
-CRD가 있어야 존재할 수 있고, 대상 네임스페이스(`monitoring`)도 먼저 생겨야 한다.
+있다. `external-secrets-config`와 `karpenter-config`는 `argocd.argoproj.io/sync-wave: "1"`을
+달아 뒤에 동기화한다 — 둘 다 앞 물결의 차트가 설치하는 CRD가 있어야 존재할 수 있고,
+ExternalSecret은 대상 네임스페이스(`monitoring`)도 먼저 생겨야 한다.
 
 재시도로도 결국 회복되지만, 순서가 분명한 의존은 순서로 표현하는 편이 읽기 쉽다.
 

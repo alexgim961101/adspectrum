@@ -62,3 +62,8 @@ output "github_actions_role_arn" {
   description = "CI 워크플로의 role-to-assume 값"
   value       = module.iam.github_actions_role_arn
 }
+
+output "fis_spot_interruption_template_id" {
+  description = "spot 회수 실험 템플릿 ID. aws fis start-experiment에 넘긴다"
+  value       = aws_fis_experiment_template.spot_interruption.id
+}

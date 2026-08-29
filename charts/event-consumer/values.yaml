@@ -19,10 +19,12 @@ metrics:
   port: 9090
   interval: 15s
 
-# 레플리카 수는 이 값들이 정한다. 상한 5의 근거는 DECISIONS 001(노드 파드 수용량).
+# 레플리카 수는 이 값들이 정한다. 상한은 한때 5였다 — 노드가 2대로 고정이라
+# 그 이상은 Pending에 걸렸기 때문이다(DECISIONS 001). Karpenter가 노드를 만들면서
+# 그 제약이 사라져 스펙의 원래 값인 10으로 되돌린다 (DECISIONS 018).
 keda:
   minReplicaCount: 0
-  maxReplicaCount: 5
+  maxReplicaCount: 10
   queueLength: 100
   cooldownPeriod: 120
 

@@ -1,0 +1,44 @@
+# 어떤 조건으로 노드를 만들고 언제 없앨지 정의한다.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+
+      # 인스턴스 타입을 하나로 고정하지 않는다. spot은 특정 타입의 재고가
+      # 마르면 못 받는데, 후보가 넓을수록 회수도 덜 겪는다.
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["t", "m", "c"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["2"]
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["2", "4"]
+
+      # 노드가 오래 살수록 패치에서 멀어진다. 하루를 넘기면 교체한다.
+      expireAfter: 24h
+
+  # 파드가 사라지면 빈 노드를 정리하고, 더 싸게 묶을 수 있으면 다시 배치한다.
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m
+
+  # 상한이 없으면 잘못된 파드 하나가 계정을 비운다. 이 프로젝트 규모에서
+  # 필요한 최대치보다 조금 위에 둔다.
+  limits:
+    cpu: "16"

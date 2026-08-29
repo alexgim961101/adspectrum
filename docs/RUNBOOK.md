@@ -476,6 +476,65 @@ watch -n5 'kubectl get deploy event-consumer -n adspectrum; kubectl get hpa -n a
 **초당 5건을 계속 흘리면 0까지 내려가지 않는다.** 유입이 있는 한 큐가 완전히 비지 않기
 때문이다. scale-to-zero를 보려면 발행을 멈춰야 한다.
 
+### 노드 오토스케일링과 spot 회수 (Karpenter)
+
+파드 오토스케일링(KEDA)과 노드 오토스케일링(Karpenter)이 함께 도는지 본다.
+
+```sh
+kubectl get nodes -L karpenter.sh/nodepool,node.kubernetes.io/instance-type
+kubectl get nodeclaims
+kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter --tail=50 -f
+```
+
+`karpenter.sh/nodepool` 라벨이 붙은 노드가 Karpenter가 만든 것이고, 없는 노드가 관리형
+노드그룹이다. 부하를 올리면 컨슈머 파드가 늘고, 자리가 모자라면 `NodeClaim`이 생긴다.
+
+부하를 내리면 `consolidateAfter`(1분) 뒤에 빈 노드가 정리된다. 관리형 노드그룹은 그대로
+남는다 — 플랫폼 컴포넌트가 그 위에 있기 때문이다.
+
+**spot 회수를 직접 일으킨다.** 회수를 기다리는 것이 아니라 만드는 것이 요점이다.
+
+```sh
+tpl=$(terraform -chdir=infra/envs/dev output -raw fis_spot_interruption_template_id)
+aws fis start-experiment --region ap-northeast-2 \
+  --experiment-template-id "$tpl" --query 'experiment.id' --output text
+```
+
+2분 예고 뒤에 인스턴스가 회수된다. 그동안 볼 것은 셋이다.
+
+```sh
+# 1. Karpenter가 회수 알림을 받아 노드를 비우는가
+kubectl get nodes -w
+
+# 2. 컨슈머가 처리 중이던 배치를 마치고 나가는가 (유실 없이)
+kubectl logs -n adspectrum -l app.kubernetes.io/name=event-consumer -f | grep -i shutdown
+
+# 3. 회수 뒤 DLQ가 비어 있는가 — 처리 중이던 메시지는 재전달되어야 한다
+aws sqs get-queue-attributes --region ap-northeast-2 \
+  --queue-url https://sqs.ap-northeast-2.amazonaws.com/894759291324/adspectrum-events-dlq \
+  --attribute-names ApproximateNumberOfMessages --query 'Attributes'
+```
+
+실험은 Karpenter가 만든 노드 하나만 고른다(`karpenter.sh/nodepool` 태그). 관리형
+노드그룹은 대상이 아니므로 플랫폼 컴포넌트가 함께 흔들리지 않는다.
+
+### 알림이 실제로 울리는지
+
+규칙이 발화해 Slack까지 가는지는 두 가지로 만든다.
+
+```sh
+# 스키마 위반 메시지 → ConsumerInvalidMessages
+aws sqs send-message --region ap-northeast-2 \
+  --queue-url https://sqs.ap-northeast-2.amazonaws.com/894759291324/adspectrum-events \
+  --message-body '{"broken":"schema"}'
+
+# 발화 여부 확인
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
+curl -s localhost:9093/api/v2/alerts | python3 -m json.tool | grep alertname
+```
+
+`FAULT_RATE=0.5` 배포는 카나리 롤백과 `MetricsApiErrorBudgetBurningFast`를 동시에 만든다.
+
 ### 카나리 자동 롤백 (성공 기준 4)
 
 분석에는 트래픽이 필요하다. 요청이 없으면 카나리의 5xx 비율을 계산할 표본이 없다.

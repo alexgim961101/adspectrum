@@ -1,0 +1,25 @@
+# 어떤 EC2로 노드를 만들지 정의한다. 서브넷과 보안 그룹은 ID가 아니라 태그로
+# 찾는다 — VPC를 다시 만들면 ID가 바뀌지만 태그는 Terraform이 다시 붙인다.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  # 노드에 붙는 IAM 역할. Terraform이 이름을 고정해 두었다.
+  role: adspectrum-eks-karpenter-node
+
+  amiSelectorTerms:
+    # 별칭을 쓰면 AMI ID를 매니페스트에 박지 않아도 되고, 최신 패치를 따라간다.
+    - alias: al2023@latest
+
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: adspectrum-eks
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: adspectrum-eks
+
+  tags:
+    Project: adspectrum
+    ManagedBy: karpenter

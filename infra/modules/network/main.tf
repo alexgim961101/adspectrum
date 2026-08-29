@@ -50,6 +50,9 @@ resource "aws_subnet" "private" {
     Name                                        = "${var.name}-private-${each.key}"
     "kubernetes.io/role/internal-elb"           = "1"
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    # Karpenter가 노드를 띄울 서브넷을 이 태그로 찾는다. ID를 매니페스트에 박으면
+    # VPC를 다시 만들 때마다 매니페스트를 고쳐야 한다.
+    "karpenter.sh/discovery" = var.cluster_name
   }
 }
 
