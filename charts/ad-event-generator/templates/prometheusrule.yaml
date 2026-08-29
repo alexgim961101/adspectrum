@@ -1,0 +1,23 @@
+# 발행이 실패하면 그 이벤트는 어디에도 남지 않는다. 큐에 들어가지 못한 것은
+# 재전달도 DLQ도 없으므로, 여기서 놓치면 유실이다.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: ad-event-generator
+      rules:
+        - alert: GeneratorPublishFailures
+          expr: increase(adspectrum_publish_failures_total[10m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "SQS 발행이 실패한다"
+            description: >-
+              최근 10분 동안 {{ "{{ $value | printf \"%.0f\" }}" }}건이 SQS에 들어가지 못했다
+              (오류 코드 {{ "{{ $labels.code }}" }}). 큐에 넣지 못한 이벤트는 재전달 대상이
+              아니므로 그대로 유실된다. IRSA 권한과 큐 상태를 확인한다.

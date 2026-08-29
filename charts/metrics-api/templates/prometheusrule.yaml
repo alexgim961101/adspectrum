@@ -1,0 +1,64 @@
+{{- $budget := subf 1.0 .Values.alerts.sloTarget -}}
+{{- $fast := printf "%.4f" (mulf 14.4 $budget) -}}
+{{- $slow := printf "%.4f" (mulf 6.0 $budget) -}}
+{{- $req := "adspectrum_http_request_duration_seconds_count" -}}
+# 가용성 목표를 얼마나 빨리 소모하고 있는지로 알린다.
+#
+# "5xx가 5%를 넘으면 알린다"는 규칙은 1분짜리 스파이크에도 사람을 깨우고, 반대로
+# 0.6%가 한 달 내내 이어지는 상황은 놓친다. 대신 오차 예산({{ printf "%.1f" (mulf 100.0 $budget) }}%)을
+# 몇 배 속도로 태우는지를 본다. 짧은 창과 긴 창을 함께 보는 이유는 짧은 창만 쓰면
+# 순간 스파이크에, 긴 창만 쓰면 늦은 감지에 걸리기 때문이다.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "app.name" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: metrics-api-slo
+      rules:
+        # 이 속도면 30일 예산을 약 2일 만에 다 쓴다.
+        - alert: MetricsApiErrorBudgetBurningFast
+          expr: |
+            (sum(rate({{ $req }}{status=~"5.."}[5m])) / sum(rate({{ $req }}[5m])) > {{ $fast }})
+            and
+            (sum(rate({{ $req }}{status=~"5.."}[1h])) / sum(rate({{ $req }}[1h])) > {{ $fast }})
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "가용성 오차 예산을 빠르게 소모하고 있다"
+            description: >-
+              5xx 비율이 5분·1시간 창 모두에서 {{ $fast }}를 넘었다
+              (현재 {{ "{{ $value | humanizePercentage }}" }}). 목표 {{ .Values.alerts.sloTarget }} 기준
+              14.4배 속도이며, 이대로면 30일 예산이 약 이틀 만에 소진된다.
+
+        # 당장 깨울 일은 아니지만 방치하면 목표를 못 지킨다.
+        - alert: MetricsApiErrorBudgetBurningSlow
+          expr: |
+            (sum(rate({{ $req }}{status=~"5.."}[30m])) / sum(rate({{ $req }}[30m])) > {{ $slow }})
+            and
+            (sum(rate({{ $req }}{status=~"5.."}[6h])) / sum(rate({{ $req }}[6h])) > {{ $slow }})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "가용성 오차 예산이 꾸준히 새고 있다"
+            description: >-
+              5xx 비율이 30분·6시간 창 모두에서 {{ $slow }}를 넘었다
+              (현재 {{ "{{ $value | humanizePercentage }}" }}). 즉시 대응할 정도는 아니지만
+              원인을 찾지 않으면 이번 주기의 목표를 놓친다.
+
+        # 트래픽이 없으면 위 두 규칙은 0으로 나누어 아무것도 판단하지 못한다.
+        # 조회가 완전히 끊긴 상황도 정상은 아니므로 따로 본다.
+        - alert: MetricsApiNoTraffic
+          expr: sum(rate({{ $req }}[15m])) == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "metrics-api로 들어오는 요청이 없다"
+            description: >-
+              15분 동안 요청이 한 건도 없다. 부하 스크립트가 멈췄거나 ALB 경로가
+              끊겼을 수 있다. 이 상태에서는 오차 예산 알림이 동작하지 않는다.

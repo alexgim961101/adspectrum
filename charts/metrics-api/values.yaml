@@ -26,6 +26,11 @@ containerPort: 8000
 metrics:
   interval: 15s
 
+# 가용성 목표. 오차 예산은 1 - 목표이며, 알림은 이 예산을 얼마나 빨리 태우고
+# 있는지로 판단한다. 임계값 하나로 알리면 1분짜리 스파이크에도 사람을 깨운다.
+alerts:
+  sloTarget: 0.995
+
 # 카나리 단계마다 카나리 파드의 5xx 비율을 Prometheus에 물어본다.
 analysis:
   prometheusAddress: http://kube-prometheus-stack-prometheus.monitoring:9090
