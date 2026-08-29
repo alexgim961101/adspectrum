@@ -142,6 +142,9 @@ terraform apply tfplan
 실행되는 것이 원리상 다를 수 있다. 계획 파일을 넘기면 확인 프롬프트도 뜨지 않는다.
 
 `tfplan`에는 모든 값이 평문으로 들어간다. `.gitignore` 대상이지만 다 쓰면 지운다.
+남겨 두면 `trivy config`가 그 파일을 plan 스냅샷으로 따로 스캔하는데, 그때의 경로는
+`../../modules/...` 형태라 `.trivyignore.yaml`의 예외가 적용되지 않아 없던 위반이
+생긴 것처럼 보인다. CI는 이 파일을 받지 않으므로 로컬에서만 겪는다.
 
 소요 시간은 **실측 12분**이다(2026-08-23, 리소스 72개). 대부분 EKS 컨트롤플레인 생성이고,
 VPC·SQS·DynamoDB·ECR·IAM은 3분 안에 끝난다. `Still creating... [10m30s elapsed]` 같은 줄이
