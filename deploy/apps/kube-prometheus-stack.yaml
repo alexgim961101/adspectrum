@@ -19,9 +19,81 @@ spec:
     targetRevision: 88.5.3
     helm:
       values: |
-        # 알림 발송은 이 프로젝트의 완료 조건에 없다. 파드와 메모리를 아낀다.
+        # 감지만 하고 통보하지 않으면 사람이 대시보드를 보고 있어야만 장애를 안다.
+        # 규칙은 각 앱 차트의 PrometheusRule에 있다.
         alertmanager:
-          enabled: false
+          enabled: true
+
+          alertmanagerSpec:
+            resources:
+              requests:
+                cpu: 20m
+                memory: 64Mi
+              limits:
+                memory: 128Mi
+
+            # 웹훅 URL은 비밀이라 Git에 넣지 않는다. 부트스트랩에서 사람이 주입한
+            # 시크릿을 파일로 마운트하고, 설정은 그 파일을 가리킨다
+            # (RUNBOOK 4b, DECISIONS 016).
+            secrets:
+              - adspectrum-alertmanager-slack
+
+          config:
+            global:
+              slack_api_url_file: /etc/alertmanager/secrets/adspectrum-alertmanager-slack/webhook-url
+
+            route:
+              # 같은 알림이 여러 파드에서 동시에 뜨면 한 건으로 묶는다.
+              group_by: [alertname, namespace]
+              group_wait: 30s
+              group_interval: 5m
+              # 해결되지 않은 알림을 4시간마다 다시 알린다. 더 짧으면 소음이 되고
+              # 더 길면 잊힌다.
+              repeat_interval: 4h
+              receiver: slack
+
+              routes:
+                # Watchdog은 항상 발화하는 감시용 알림이다. 알림 파이프라인이
+                # 살아 있는지 외부에서 확인하는 용도라, 채널로 보내면 소음만 된다.
+                # 실제 운영이라면 dead man's switch 서비스로 보낸다.
+                - matchers: [alertname = "Watchdog"]
+                  receiver: "null"
+                  continue: false
+
+                - matchers: [severity = "critical"]
+                  receiver: slack
+                  repeat_interval: 1h
+
+            receivers:
+              - name: "null"
+              - name: slack
+                slack_configs:
+                  # Alertmanager가 이 필드를 요구하지만, 최신 방식(Slack 앱)으로 만든
+                  # 수신 웹훅은 생성 시점에 채널이 고정되어 이 값을 무시한다.
+                  # 채널을 바꾸려면 웹훅을 다시 발급한다.
+                  - channel: "#adspectrum-alerts"
+                    send_resolved: true
+                    title: '{{ "{{ .CommonLabels.severity | toUpper }}" }} · {{ "{{ .CommonLabels.alertname }}" }}'
+                    text: >-
+                      {{ "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}\n{{ end }}" }}
+
+            inhibit_rules:
+              # 같은 대상에 critical이 떠 있으면 warning은 묻는다.
+              - source_matchers: [severity = "critical"]
+                target_matchers: [severity = "warning"]
+                equal: [alertname, namespace]
+
+        # 관리형 컨트롤플레인에서는 이 컴포넌트들을 긁을 수 없다. 기본 규칙을 켜 두면
+        # "스케줄러가 죽었다"는 알림이 영원히 발화해 채널을 덮는다. 울릴 수 없는
+        # 알림을 켜 두면 사람은 채널 전체를 무시하게 된다.
+        defaultRules:
+          rules:
+            etcd: false
+            kubeControllerManager: false
+            kubeScheduler: false
+            kubeSchedulerAlerting: false
+            kubeSchedulerRecording: false
+            kubeProxy: false
 
         prometheus:
           prometheusSpec:
@@ -66,13 +138,6 @@ spec:
           # 대시보드는 코드로 정의해 다시 만들 수 있으므로 볼륨을 쓰지 않는다.
           persistence:
             enabled: false
-
-          sidecar:
-            datasources:
-              # alertmanager를 껐으므로 그 데이터소스도 만들지 않는다.
-              # 그대로 두면 존재하지 않는 주소를 가리켜 Grafana에서 오류로 보인다.
-              alertmanager:
-                enabled: false
 
           additionalDataSources:
             # SQS 큐 깊이는 Prometheus가 아니라 CloudWatch에만 있다.
