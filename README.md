@@ -41,7 +41,7 @@ AWS EKS 위에 IaC(Terraform)와 GitOps(ArgoCD)로 구축·운영하는 프로�
 ### 완료 정의를 채운 뒤 보강한 것
 
 다섯 개를 채우고 나서, 만들 때는 보이지 않다가 운영 관점에서 드러난 구멍을 메웠습니다.
-각각의 근거와 트레이드오프는 [DECISIONS](docs/DECISIONS.md) 015~018에 있습니다.
+각각의 근거와 트레이드오프는 [DECISIONS](docs/DECISIONS.md) 015~019에 있습니다.
 
 | 보강 | 무엇이 비어 있었나 | 검증 |
 |---|---|---|
@@ -178,6 +178,14 @@ push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
 | p95 / 평균 | 18.18ms / 15.22ms |
 | 실패율 | 1.75% — 전부 롤백 데모에서 의도적으로 주입한 500 |
 
+### 대시보드
+
+대시보드는 UI에서 만들지 않고 ConfigMap으로 관리합니다. Grafana에 볼륨을 붙이지 않아서
+손으로 만든 것은 파드 재시작이면 사라지고, 클러스터를 지웠다 올려도 같은 화면이 나와야
+하기 때문입니다.
+
+![Grafana 대시보드](docs/images/grafana-dashboard.jpg)
+
 ## 이 프로젝트가 다루는 것
 
 | 영역 | 프로젝트 요소 |
@@ -189,6 +197,7 @@ push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
 | 장애 감지와 통보 | 앱 차트에 담은 PrometheusRule, 오차 예산 소진 속도 기반 SLO 알림, Alertmanager → Slack |
 | 비용 최적화 | spot 노드, KEDA scale-to-zero, 단일 NAT, 온디맨드 DynamoDB, 예산 알람 |
 | 보안·접근 관리 | IRSA 파드별 최소 권한, GitHub OIDC(장기 시크릿 없는 CI 인증), SSM + External Secrets, 읽기 전용 배포 키 |
+| 공급망 보안 | 푸시 전 이미지 취약점 게이트, CycloneDX SBOM, IaC 오설정 검사 |
 | 이벤트 드리븐 파이프라인 | SQS + DLQ, 배치 사전 집계, KEDA 큐 길이 오토스케일링 |
 | 점진적 배포 | Argo Rollouts 카나리 + Prometheus 분석 자동 롤백 |
 
@@ -205,6 +214,9 @@ push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
 - **Terraform 상태를 S3로 옮김** — 처음에는 1인 프로젝트라 로컬 state로 시작했습니다.
   CI가 PR마다 `plan`을 돌리려면 상태를 읽어야 해서 뒤집었고, 마침 리소스가 0개인
   시점이라 이전 비용이 없었습니다. 결정을 언제 왜 뒤집었는지는 DECISIONS 015에 있습니다.
+- **취약점 게이트는 고칠 수 있는 것만 막습니다** — 수정본이 없는 취약점까지 실패로
+  처리하면 파이프라인이 상시 빨간불이 되고, 그러면 고칠 수 있는 것이 새로 생겨도 묻힙니다.
+  `.trivyignore.yaml`에 예외를 이유와 함께 적어 관리하는 것과 같은 판단입니다.
 - **단일 NAT Gateway** — 가용성보다 비용을 택했습니다. 프로덕션이라면 AZ마다 둡니다.
 - **VPC CNI prefix delegation** — 기본 설정에서는 `t3.medium` 한 대가 파드 17개까지만
   수용해 플랫폼 컴포넌트만으로 자리가 찼습니다. 켠 뒤 110개가 됐습니다.
@@ -217,7 +229,6 @@ push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
 - Vault — 비밀은 SSM + External Secrets로 옮겼습니다. 부트스트랩에서 사람이 넣는 것은
   ArgoCD 배포 키 하나뿐인데, 이건 순환 때문에 남습니다(키가 있어야 저장소를 읽고,
   저장소를 읽어야 나머지 설정을 가져옵니다). 동적 자격증명이 필요해지면 Vault를 봅니다
-- 이미지 취약점 스캔과 SBOM — ECR 스캔은 켜져 있지만 CI가 결과를 보지 않습니다
 - 컨슈머의 graceful shutdown을 회수 실험으로 직접 확인 — 이번에는 Karpenter가 만든
   노드를 대상으로 했고, 컨슈머가 얹힌 관리형 노드는 대상이 아니었습니다
 - 분산 트레이싱(Tempo), 멀티 환경(stage/prod)
@@ -253,14 +264,6 @@ deploy/bootstrap/install.sh          # ArgoCD 설치 + app-of-apps 뿌리 적용
 작업하지 않는 시간에는 `terraform destroy`로 내립니다. 그래서 멱등성이 완료 정의 1번입니다.
 상시 가동하면 EKS 컨트롤플레인·NAT·ALB만으로 월 10만 원을 넘기고, 예산 알람을 8만 원에
 걸어 두었습니다.
-
-## 대시보드
-
-대시보드는 UI에서 만들지 않고 ConfigMap으로 관리합니다. Grafana에 볼륨을 붙이지 않아서
-손으로 만든 것은 파드 재시작이면 사라지고, 클러스터를 지웠다 올려도 같은 화면이 나와야
-하기 때문입니다.
-
-![Grafana 대시보드](docs/images/grafana-dashboard.jpg)
 
 ## 문서
 
