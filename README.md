@@ -38,6 +38,22 @@ AWS EKS 위에 IaC(Terraform)와 GitOps(ArgoCD)로 구축·운영하는 프로�
 | 4 | 결함 버전이 카나리 분석에 걸려 자동 롤백 | 20% 단계에서 **85초** 만에 중단, 가중치 자동 복구 |
 | 5 | 다이어그램·캡처·의사결정 기록 | 이 문서와 [docs/DECISIONS.md](docs/DECISIONS.md) |
 
+### 완료 정의를 채운 뒤 보강한 것
+
+다섯 개를 채우고 나서, 만들 때는 보이지 않다가 운영 관점에서 드러난 구멍을 메웠습니다.
+각각의 근거와 트레이드오프는 [DECISIONS](docs/DECISIONS.md) 015~017에 있습니다.
+
+| 보강 | 무엇이 비어 있었나 | 검증 |
+|---|---|---|
+| IaC에도 CI를 건다 | `apps/`·`charts/`는 CI가 지키는데 `infra/`는 검사 없이 머지됐습니다 | PR에 `plan` 코멘트까지 동작 확인 |
+| 상태를 S3로 옮긴다 | CI가 상태를 읽어야 `plan`을 돌릴 수 있습니다 | 백엔드 연결·잠금 동작 확인 |
+| 감지에서 통보까지 잇는다 | 지표는 모으는데 통보 경로가 없어 사람이 대시보드를 봐야 했습니다 | 규칙 7개 `promtool` 통과, 웹훅 도달 HTTP 200. **발화는 미검증** |
+| 비밀을 클러스터 밖으로 | 알림 웹훅이 운영자 노트북에만 있었습니다 | SSM 저장 확인. **클러스터 내 동기화는 미검증** |
+
+**미검증 표시는 의도적입니다.** 규칙이 실제로 울리고 채널에 도착하는 것은 클러스터를
+올려야 확인되고, 확인하기 전까지는 동작한다고 적지 않습니다. 이 원칙 덕분에 카나리
+분석이 조용히 실패한 것을 잡아냈습니다(아래 카나리 절).
+
 ### 오토스케일링 (KEDA)
 
 부하는 `kubectl`이 아니라 **커밋**으로 넣습니다. `deploy/values/`의 발행량을 바꿔 push하면
@@ -129,9 +145,11 @@ push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
 |---|---|
 | 클라우드 인프라를 코드로 설계·운영 | Terraform 모듈로 VPC/EKS/SQS/DynamoDB/ECR/IAM 관리, destroy·재적용 멱등성 |
 | GitOps·CI/CD 파이프라인 | GitHub Actions(CI) + ArgoCD app-of-apps(CD), 모노레포에서 `deploy/` 경로 격리 |
+| IaC 품질 게이트 | `fmt`·`validate`·tflint·trivy 검사와 PR `plan` 코멘트, S3 원격 상태 + 잠금 |
 | 모니터링·옵저버빌리티 | kube-prometheus-stack, 코드로 관리하는 Grafana 대시보드, DLQ, 에러율 기반 자동 롤백 |
+| 장애 감지와 통보 | 앱 차트에 담은 PrometheusRule, 오차 예산 소진 속도 기반 SLO 알림, Alertmanager → Slack |
 | 비용 최적화 | spot 노드, KEDA scale-to-zero, 단일 NAT, 온디맨드 DynamoDB, 예산 알람 |
-| 보안·접근 관리 | IRSA 파드별 최소 권한, GitHub OIDC(장기 시크릿 없는 CI 인증), 읽기 전용 배포 키 |
+| 보안·접근 관리 | IRSA 파드별 최소 권한, GitHub OIDC(장기 시크릿 없는 CI 인증), SSM + External Secrets, 읽기 전용 배포 키 |
 | 이벤트 드리븐 파이프라인 | SQS + DLQ, 배치 사전 집계, KEDA 큐 길이 오토스케일링 |
 | 점진적 배포 | Argo Rollouts 카나리 + Prometheus 분석 자동 롤백 |
 
@@ -157,8 +175,14 @@ push(main) ─▶ 변경 감지 ─▶ ruff·pytest ─▶ 이미지 푸시(ECR)
 의도적으로 범위 밖에 둔 것들입니다.
 
 - `event_id` 조건부 쓰기로 exactly-once 집계
-- External Secrets + Vault로 배포 키·자격증명 관리 (지금은 부트스트랩 시점에 사람이 주입)
-- 분산 트레이싱(Tempo), 멀티 환경(stage/prod), Karpenter
+- Vault — 비밀은 SSM + External Secrets로 옮겼습니다. 부트스트랩에서 사람이 넣는 것은
+  ArgoCD 배포 키 하나뿐인데, 이건 순환 때문에 남습니다(키가 있어야 저장소를 읽고,
+  저장소를 읽어야 나머지 설정을 가져옵니다). 동적 자격증명이 필요해지면 Vault를 봅니다
+- **Karpenter** — KEDA가 파드를 늘려도 노드는 고정이라 스케일링이 한 계층에서 끊깁니다.
+  현재 상한 5는 노드 용량에서 온 값입니다
+- spot 중단 실험(AWS FIS) — 컨슈머의 graceful shutdown과 파드 분산이 실제로 동작하는지
+- 이미지 취약점 스캔과 SBOM — ECR 스캔은 켜져 있지만 CI가 결과를 보지 않습니다
+- 분산 트레이싱(Tempo), 멀티 환경(stage/prod)
 - Kinesis/Kafka — SQS를 고른 이유는 관리 부담과 KEDA 연동 단순성이고, 수천만 TPS 규모에서는
   선택이 달라집니다
 - HTTPS(ACM) + 커스텀 도메인 — 도메인이 없어 ALB 기본 DNS + HTTP로 데모
