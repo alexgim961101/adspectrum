@@ -1,7 +1,7 @@
 # image.tag는 CI가 갱신한다.
 image:
   repository: 894759291324.dkr.ecr.ap-northeast-2.amazonaws.com/adspectrum/metrics-api
-  tag: "a0e7911"
+  tag: "b7e3f67"
 serviceAccount:
   name: metrics-api
   roleArn: arn:aws:iam::894759291324:role/adspectrum-metrics-api
